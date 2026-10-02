@@ -511,13 +511,13 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
             />
           </div>
         ) : (
-          /* Case B: Professor Nova Digital Teacher Stage (Compact & Calm by default, or Expandable Focus Mode) */
+          /* Case B: Professor Nova Adaptive Teacher Stage (Compact & Calm by default, or Expandable Focus Mode) */
           <div
             className={`hidden lg:flex flex-col border-l border-slate-200/80 bg-white p-5 transition-all duration-300 ${
               isFocusTeacher ? 'w-96' : 'w-72'
             }`}
           >
-            {/* The Futuristic AI Teacher */}
+            {/* Professor Nova Adaptive Teacher */}
             <ProfessorNova
               provider="auto"
               state={avatarState}
@@ -562,6 +562,34 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
           </div>
         )}
       </div>
+
+      {/* Mobile Focus Teacher Modal */}
+      {isFocusTeacher && (
+        <div className="lg:hidden fixed inset-0 z-50 bg-slate-950/40 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-5 max-w-sm w-full shadow-2xl relative animate-fadeIn">
+            <button
+              onClick={() => setIsFocusTeacher(false)}
+              className="absolute top-3 right-3 p-1.5 text-slate-400 hover:text-slate-700 rounded-full hover:bg-slate-100 cursor-pointer"
+              title="Close focus view"
+            >
+              <X className="w-4 h-4" />
+            </button>
+            <ProfessorNova
+              provider="auto"
+              state={avatarState}
+              spokenText={spokenText}
+              isMuted={isMuted}
+              onToggleMute={() => setIsMuted(!isMuted)}
+              onReplay={() => {
+                if (spokenText) playSpeech(spokenText);
+              }}
+              onInterrupt={handleInterrupt}
+              isFocusMode={true}
+              onToggleFocusMode={() => setIsFocusTeacher(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

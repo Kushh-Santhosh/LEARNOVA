@@ -52,6 +52,22 @@
   50% { opacity: 0.85; transform: scale(1.03); }
 }
 
+@keyframes nova-idle-breath {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-3.5px); }
+}
+
+@keyframes nova-speaking-sway {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  28% { transform: translateY(1.8px) rotate(-0.7deg); }
+  72% { transform: translateY(-1.2px) rotate(0.7deg); }
+}
+
+@keyframes nova-listening {
+  0%, 100% { transform: translateY(-1px) rotate(0.6deg); }
+  50% { transform: translateY(-2.2px) rotate(0.4deg); }
+}
+
 @keyframes avatar-breath {
   0%, 100% { transform: translateY(0px) scale(1); }
   50% { transform: translateY(-1.5px) scale(1.008); }
