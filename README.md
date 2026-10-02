@@ -155,3 +155,4 @@ LEARNOVA/
 - Zero hardcoded API keys. All keys strictly managed via `.env`.
 - Graceful degradation ensures zero breaking failures even if external third-party APIs are unconfigured or rate-limited.
 - Strict source citations guarantee that every answer links to a verifiable document excerpt and page number.
+# LEARNOVA
