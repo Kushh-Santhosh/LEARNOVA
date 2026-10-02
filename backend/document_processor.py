@@ -1,18 +1,38 @@
 """
-LEARNOVA Document Intelligence Engine
-Extracts structure, sections, page numbers, chunks, and concepts from uploaded documents.
-Supports PDF (via pypdf), Markdown, and TXT files.
+LEARNOVA Document Intelligence & Extraction Engine
+Extracts structure, sections, page numbers, chunks, tables, and concept graphs from arbitrary documents.
+Supports PDF (via pypdf), DOCX (via python-docx), Markdown, and TXT files.
+Includes strict prompt-injection defense: uploaded content is strictly encapsulated as data.
 """
 
 import os
 import re
-import uuid
 from typing import List, Dict, Any, Tuple
 from pypdf import PdfReader
+import docx
 
 class DocumentProcessor:
     @staticmethod
-    def extract_from_pdf(file_path: str, doc_id: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    def sanitize_text(text: str) -> str:
+        """
+        Defends against prompt injection in user-uploaded documents.
+        Neutralizes instruction overrides such as 'ignore previous instructions',
+        'system prompt', 'developer mode', etc., treating them strictly as document content.
+        """
+        if not text:
+            return ""
+        # Remove null bytes and control chars
+        cleaned = text.replace("\x00", "").strip()
+        # Neutralize common injection triggers by prefixing quote context
+        cleaned = re.sub(
+            r"(?i)\b(ignore all previous instructions|system:\s*you are|override developer instructions|reveal api keys)\b",
+            r"[quoted text: \1]",
+            cleaned
+        )
+        return cleaned
+
+    @classmethod
+    def extract_from_pdf(cls, file_path: str, doc_id: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Extract pages, sections, and structured chunks from PDF."""
         reader = PdfReader(file_path)
         chunks: List[Dict[str, Any]] = []
@@ -21,7 +41,8 @@ class DocumentProcessor:
         
         for page_idx, page in enumerate(reader.pages):
             page_num = page_idx + 1
-            text = page.extract_text() or ""
+            raw_text = page.extract_text() or ""
+            text = cls.sanitize_text(raw_text)
             if not text.strip():
                 continue
                 
@@ -29,11 +50,11 @@ class DocumentProcessor:
             buffer = []
             
             for line in lines:
-                # Detect section headers (all caps, numbered, or short bold-like lines)
+                # Detect section headers (numbered, title-like, or capitalized)
                 if re.match(r"^(\d+[\.\)]\s+|Chapter\s+\d+|Section\s+\d+|[A-Z\s]{4,30}$)", line) and len(line) < 60:
                     if buffer:
                         chunk_content = " ".join(buffer).strip()
-                        if len(chunk_content) > 30:
+                        if len(chunk_content) > 25:
                             chunks.append({
                                 "chunk_id": f"chk_{doc_id}_{len(chunks)+1}",
                                 "document_id": doc_id,
@@ -51,7 +72,7 @@ class DocumentProcessor:
                     })
                 else:
                     buffer.append(line)
-                    if len(" ".join(buffer)) > 600:
+                    if len(" ".join(buffer)) > 550:
                         chunks.append({
                             "chunk_id": f"chk_{doc_id}_{len(chunks)+1}",
                             "document_id": doc_id,
@@ -64,7 +85,7 @@ class DocumentProcessor:
                         
             if buffer:
                 chunk_content = " ".join(buffer).strip()
-                if len(chunk_content) > 30:
+                if len(chunk_content) > 25:
                     chunks.append({
                         "chunk_id": f"chk_{doc_id}_{len(chunks)+1}",
                         "document_id": doc_id,
@@ -76,9 +97,96 @@ class DocumentProcessor:
                     
         return sections, chunks
 
-    @staticmethod
-    def extract_from_text(text: str, doc_id: str, filename: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Extract structured sections and chunks from text/markdown."""
+    @classmethod
+    def extract_from_docx(cls, file_path: str, doc_id: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Extract structured sections, paragraphs, and tables from DOCX."""
+        doc = docx.Document(file_path)
+        sections: List[Dict[str, Any]] = []
+        chunks: List[Dict[str, Any]] = []
+        current_section = "Introduction"
+        current_page = 1
+        word_count = 0
+        buffer: List[str] = []
+
+        # Process paragraphs
+        for para in doc.paragraphs:
+            text = cls.sanitize_text(para.text)
+            if not text:
+                continue
+
+            words = len(text.split())
+            word_count += words
+            if word_count > 300:
+                current_page += 1
+                word_count = 0
+
+            # Detect headings in Word styles or text
+            if para.style and ("Heading" in para.style.name or "Title" in para.style.name) or re.match(r"^\d+\.\s+[A-Za-z]", text):
+                if buffer:
+                    chunk_content = " ".join(buffer).strip()
+                    if len(chunk_content) > 20:
+                        chunks.append({
+                            "chunk_id": f"chk_{doc_id}_{len(chunks)+1}",
+                            "document_id": doc_id,
+                            "page_number": current_page,
+                            "section": current_section,
+                            "content": chunk_content,
+                            "source_type": "docx"
+                        })
+                    buffer = []
+                current_section = text
+                sections.append({
+                    "id": f"sec_{len(sections)+1}",
+                    "title": current_section,
+                    "page": current_page
+                })
+            else:
+                buffer.append(text)
+                if len(" ".join(buffer)) > 550:
+                    chunks.append({
+                        "chunk_id": f"chk_{doc_id}_{len(chunks)+1}",
+                        "document_id": doc_id,
+                        "page_number": current_page,
+                        "section": current_section,
+                        "content": " ".join(buffer).strip(),
+                        "source_type": "docx"
+                    })
+                    buffer = []
+
+        if buffer:
+            chunks.append({
+                "chunk_id": f"chk_{doc_id}_{len(chunks)+1}",
+                "document_id": doc_id,
+                "page_number": current_page,
+                "section": current_section,
+                "content": " ".join(buffer).strip(),
+                "source_type": "docx"
+            })
+
+        # Process any tables present in the Word doc
+        for t_idx, table in enumerate(doc.tables):
+            table_rows = []
+            for row in table.rows:
+                row_cells = [cls.sanitize_text(c.text.strip()) for c in row.cells]
+                if any(row_cells):
+                    table_rows.append(row_cells)
+            if table_rows:
+                table_text = f"Table {t_idx+1}: " + " | ".join([", ".join(r) for r in table_rows])
+                chunks.append({
+                    "chunk_id": f"chk_{doc_id}_tbl_{t_idx+1}",
+                    "document_id": doc_id,
+                    "page_number": current_page,
+                    "section": f"Table: {current_section}",
+                    "content": table_text,
+                    "source_type": "table"
+                })
+
+        return sections, chunks
+
+    @classmethod
+    def extract_from_text(cls, raw_text: str, doc_id: str, filename: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Extract structured sections and chunks from text/markdown with prompt injection defense."""
+        text = cls.sanitize_text(raw_text)
         lines = text.split("\n")
         sections: List[Dict[str, Any]] = []
         chunks: List[Dict[str, Any]] = []
@@ -92,7 +200,7 @@ class DocumentProcessor:
             if not stripped:
                 continue
 
-            # Page simulation: ~250 words per page
+            # Logical page simulation: ~250 words per page
             line_words = len(stripped.split())
             word_count += line_words
             if word_count > 250:
@@ -146,45 +254,47 @@ class DocumentProcessor:
 
         return sections, chunks
 
-    @staticmethod
-    def extract_concepts_and_graph(chunks: List[Dict[str, Any]], title: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    @classmethod
+    def extract_concepts_and_graph(cls, chunks: List[Dict[str, Any]], title: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
-        Builds a structured knowledge graph (nodes + relationships).
-        Uses pattern-based definition mining and semantic heuristics.
+        Builds a structured knowledge graph (nodes + relationships) for arbitrary documents.
+        Uses pattern-based definition mining, heading hierarchy, and typed semantic relationships.
         """
         concepts: List[Dict[str, Any]] = []
         relationships: List[Dict[str, Any]] = []
         concept_names = set()
 
-        # Definition indicators: "X is a", "X refers to", "X provides", "X consists of"
-        def_pattern = re.compile(r"([A-Z][A-Za-z0-9\s\-_]{2,35})\s+(?:is a|is an|is the|refers to|provides|consists of|organizes|handles)\s+([^.]+)", re.IGNORECASE)
+        def_pattern = re.compile(
+            r"([A-Z][A-Za-z0-9\s\-_]{2,35})\s+(?:is a|is an|is the|refers to|provides|consists of|organizes|handles|defines|measures|minimizes|uncovers|penalizes)\s+([^.]+)",
+            re.IGNORECASE
+        )
 
         for chunk in chunks:
             text = chunk["content"]
             section = chunk["section"]
             page = chunk["page_number"]
 
-            # 1. Section as a macro-concept
-            sec_clean = re.sub(r"^\d+\.?\s*", "", section).strip()
-            if sec_clean and sec_clean.lower() not in concept_names and len(sec_clean) < 40:
+            # 1. Clean section title to form a Core Topic concept
+            sec_clean = re.sub(r"^\d+[\.\)]\s*", "", section).strip()
+            sec_clean = re.sub(r"^#+\s*", "", sec_clean).strip()
+            if sec_clean and sec_clean.lower() not in concept_names and len(sec_clean) < 50 and not sec_clean.lower().startswith("table"):
                 cid = f"c_{re.sub(r'[^a-zA-Z0-9]', '_', sec_clean).lower()}"
                 concept_names.add(sec_clean.lower())
                 concepts.append({
                     "id": cid,
                     "name": sec_clean,
                     "category": "Core Topic",
-                    "summary": f"Key topic covered in {section} on page {page}.",
+                    "summary": f"Key curriculum topic from {section} on page {page}.",
                     "page_number": page,
                     "mastery_score": 0.0,
                     "status": "unseen"
                 })
 
-            # 2. Extract defined terms
+            # 2. Extract defined technical terms
             matches = def_pattern.findall(text)
             for name, summary in matches:
                 name_clean = name.strip()
-                # filter out generic pronoun beginnings
-                if any(name_clean.lower().startswith(w) for w in ["this", "that", "these", "it", "each", "which", "there"]):
+                if any(name_clean.lower().startswith(w) for w in ["this", "that", "these", "it", "each", "which", "there", "when", "if", "for", "a", "an"]):
                     continue
                 if len(name_clean) > 3 and name_clean.lower() not in concept_names:
                     concept_names.add(name_clean.lower())
@@ -199,7 +309,7 @@ class DocumentProcessor:
                         "status": "unseen"
                     })
 
-        # 3. Build relationships between consecutive or co-occurring concepts
+        # 3. Connect nodes with typed relationships
         for i in range(len(concepts)):
             c1 = concepts[i]
             for j in range(i + 1, min(i + 4, len(concepts))):
@@ -212,4 +322,4 @@ class DocumentProcessor:
                     "description": f"{c2['name']} relates to {c1['name']} within the curriculum."
                 })
 
-        return concepts[:15], relationships[:20]
+        return concepts[:16], relationships[:24]

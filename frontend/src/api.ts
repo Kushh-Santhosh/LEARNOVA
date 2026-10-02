@@ -17,6 +17,16 @@ export const api = {
     return res.json();
   },
 
+  async getAvatarSession() {
+    const res = await fetch(`${API_BASE}/avatar/session`);
+    return res.json();
+  },
+
+  async getVoiceCapabilities() {
+    const res = await fetch(`${API_BASE}/voice/capabilities`);
+    return res.json();
+  },
+
   async getDocuments(): Promise<DocumentMeta[]> {
     const res = await fetch(`${API_BASE}/documents`);
     return res.json();
@@ -48,6 +58,7 @@ export const api = {
     message: string;
     active_concept?: string;
     mode?: string;
+    language?: string;
   }): Promise<TeacherResponse> {
     const res = await fetch(`${API_BASE}/teach`, {
       method: 'POST',
@@ -76,11 +87,25 @@ export const api = {
     return res.json();
   },
 
-  async evaluateTeachBack(docId: string, conceptId: string, explanation: string): Promise<TeachBackEvaluation> {
+  async evaluateTeachBack(docId: string, conceptId: string, explanation: string, conceptName?: string): Promise<TeachBackEvaluation> {
     const res = await fetch(`${API_BASE}/teach-back/evaluate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ document_id: docId, concept_id: conceptId, student_explanation: explanation }),
+      body: JSON.stringify({
+        document_id: docId,
+        concept_id: conceptId,
+        concept_name: conceptName || '',
+        student_explanation: explanation
+      }),
+    });
+    return res.json();
+  },
+
+  async resolveMisconception(conceptName: string) {
+    const res = await fetch(`${API_BASE}/learner/misconceptions/resolve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ concept_name: conceptName }),
     });
     return res.json();
   },
@@ -98,4 +123,9 @@ export const api = {
     });
     return res.json();
   },
+
+  async searchWorkspace(query: string) {
+    const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`);
+    return res.json();
+  }
 };

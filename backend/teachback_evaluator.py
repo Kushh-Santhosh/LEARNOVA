@@ -1,14 +1,14 @@
 """
-LEARNOVA Teach-Back Evaluation Engine
-Implements the Feynman 'Learning by Teaching' pedagogical paradigm.
+LEARNOVA Feynman Teach-Back Evaluation Engine
 Evaluates student self-explanation against structured knowledge graph nodes.
+Dynamically handles arbitrary concepts and multilingual explanations.
 """
 
 from typing import Dict, Any, List
 
 class TeachBackEvaluator:
-    # Expected concepts and their key semantic elements
-    REFERENCE_RUBRIC = {
+    # Preset high-depth rubrics
+    RUBRIC_DATABASE = {
         "c_transport_layer": {
             "name": "Transport Layer (L4)",
             "key_elements": ["process-to-process", "port", "tcp", "udp", "reliability", "flow control"],
@@ -31,20 +31,24 @@ class TeachBackEvaluator:
         }
     }
 
-    def evaluate(self, concept_id: str, student_text: str) -> Dict[str, Any]:
+    def evaluate(self, concept_id: str, student_text: str, concept_name: str = "") -> Dict[str, Any]:
         """
-        Evaluates a student's teach-back submission.
-        Returns detailed scoring, missing ideas, and actionable recommendation.
+        Evaluates student's teach-back submission.
+        Works with both preset curriculum concepts and dynamically generated arbitrary concepts.
         """
-        rubric = self.REFERENCE_RUBRIC.get(concept_id, {
-            "name": "Target Concept",
-            "key_elements": ["function", "purpose", "mechanism", "structure"],
-            "critical_distinction": "Accurate explanation of fundamental behavior"
-        })
+        rubric = self.RUBRIC_DATABASE.get(concept_id)
+        if not rubric:
+            # Dynamically derive rubric from concept name and keywords
+            tokens = [t.lower() for t in concept_name.split() if len(t) > 3]
+            rubric = {
+                "name": concept_name or "Curriculum Concept",
+                "key_elements": tokens + ["function", "purpose", "application"],
+                "critical_distinction": "Accurate explanation of fundamental behavior"
+            }
 
         student_lower = student_text.lower().strip()
         words = student_lower.split()
-        
+
         # 1. Concept Coverage
         covered_elements: List[str] = []
         missing_elements: List[str] = []
@@ -70,14 +74,14 @@ class TeachBackEvaluator:
             accuracy_score -= 20
         accuracy_score = max(30, min(100, accuracy_score))
 
-        # 4. Overall Understanding Score (weighted average)
+        # 4. Overall Understanding Score
         understanding_score = int(round((coverage_score * 0.5) + (accuracy_score * 0.5)))
 
         # 5. Recommendation message
         if detected_misconceptions:
             recommendation = (
-                f"You have a solid grasp of {rubric['name']}, but be careful: "
-                f"You mentioned that UDP is reliable. Remember, UDP trades away reliability in exchange for raw speed. "
+                f"You have a solid grasp of {rubric['name']}, but note this critical distinction: "
+                f"UDP trades away reliability in exchange for raw transmission speed. "
                 f"Let's review the transport trade-offs."
             )
         elif missing_elements:

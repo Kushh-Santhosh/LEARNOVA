@@ -1,0 +1,7 @@
+# Environmental Science: Trophic Dynamics & Biogeochemical Cycles
+
+## 1. Thermodynamic Energy Flow in Ecosystems
+Ecosystem energy flow adheres to the First and Second Laws of Thermodynamics. Solar radiant energy is fixed by photoautotrophic primary producers via photosynthesis. In accordance with Lindeman's Ten Percent Law, only approximately 10% of cumulative chemical energy transfers between consecutive trophic levels, with 90% lost to metabolic respiration and entropy.
+
+## 2. Global Carbon and Nitrogen Biogeochemical Cycles
+The global carbon cycle orchestrates exchanges between oceanic sinks, terrestrial biomass, and the atmosphere. Anthropogenic fossil fuel combustion releases sequestered gigatons of carbon dioxide, precipitating oceanic acidification. Simultaneously, the biological nitrogen cycle mandates diazotrophic fixation of inert atmospheric N2 into bioavailable ammonium by rhizobial bacterial symbionts.

@@ -18,6 +18,8 @@ from teacher_brain import teacher_brain
 from quiz_engine import quiz_engine
 from teachback_evaluator import teachback_evaluator
 from learner_state import learner_state
+from voice_provider import voice_service
+from avatar_provider import avatar_service
 from demo_data import (
     DEMO_DOCUMENT_ID,
     DEMO_DOCUMENT_TITLE,
@@ -29,11 +31,11 @@ from demo_data import (
 
 app = FastAPI(
     title="LEARNOVA - Adaptive AI Classroom API",
-    description="Backend engine for document understanding, knowledge graphs, adaptive teaching, misconception detection, and teach-back.",
-    version="1.0.0"
+    description="Backend engine for document understanding, knowledge graphs, adaptive teaching, multilingual intelligence, and real-time avatar delivery.",
+    version="1.2.0"
 )
 
-# Enable CORS for local Vite development & production
+# Enable CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -66,12 +68,14 @@ class LearnerProfileRequest(BaseModel):
     education_level: str
     learning_level: str
     preferred_style: str
+    language: Optional[str] = "en"
 
 class TeachRequest(BaseModel):
     document_id: str
     message: str
     active_concept: Optional[str] = "Transport Layer (L4)"
     mode: Optional[str] = "explain"
+    language: Optional[str] = "en"
 
 class QuizGenerateRequest(BaseModel):
     document_id: str
@@ -85,7 +89,11 @@ class QuizEvaluateRequest(BaseModel):
 class TeachBackRequest(BaseModel):
     document_id: str
     concept_id: str
+    concept_name: Optional[str] = ""
     student_explanation: str
+
+class ResolveMisconceptionRequest(BaseModel):
+    concept_name: str
 
 
 # --- API Routes ---
@@ -95,9 +103,21 @@ def health():
     return {
         "status": "healthy",
         "system": "LEARNOVA Adaptive AI Classroom",
-        "version": "1.0.0",
-        "active_documents": len(DOCUMENTS)
+        "version": "1.2.0",
+        "active_documents": len(DOCUMENTS),
+        "voice_capabilities": voice_service.get_voice_capabilities(),
+        "avatar_mode": "liveavatar" if avatar_service.heygen_key else "fallback"
     }
+
+@app.get("/api/avatar/session")
+async def get_avatar_session():
+    """Returns a short-lived streaming session token or fallback mode status."""
+    return await avatar_service.create_avatar_session()
+
+@app.get("/api/voice/capabilities")
+def get_voice_capabilities():
+    """Returns supported languages and active STT/TTS stack."""
+    return voice_service.get_voice_capabilities()
 
 @app.get("/api/documents")
 def get_documents():
@@ -111,7 +131,7 @@ def get_document(doc_id: str):
 
 @app.post("/api/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
-    """Handles upload of PDF or Text/Markdown learning materials."""
+    """Handles multi-format upload: PDF, DOCX, Markdown, and TXT with prompt injection defense."""
     os.makedirs("uploads", exist_ok=True)
     filename = file.filename or "uploaded_doc.txt"
     file_path = os.path.join("uploads", filename)
@@ -125,6 +145,9 @@ async def upload_document(file: UploadFile = File(...)):
     if file_ext == ".pdf":
         sections, chunks = DocumentProcessor.extract_from_pdf(file_path, doc_id)
         file_type = "pdf"
+    elif file_ext in [".docx", ".doc"]:
+        sections, chunks = DocumentProcessor.extract_from_docx(file_path, doc_id)
+        file_type = "docx"
     else:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
@@ -167,22 +190,23 @@ def get_concept_details(doc_id: str, concept_id: str):
 
 @app.post("/api/teach")
 async def teach_interaction(req: TeachRequest):
-    """Core AI teacher conversation loop with adaptive teaching and visual delivery."""
+    """Core AI teacher conversation loop with adaptive teaching, visual artifacts, and multilingual support."""
     result = await teacher_brain.interact(
         doc_id=req.document_id,
         student_message=req.message,
         active_concept=req.active_concept or "Transport Layer (L4)",
-        mode=req.mode or "explain"
+        mode=req.mode or "explain",
+        language=req.language or "en"
     )
     return result
 
 @app.post("/api/teach/voice")
-async def voice_interaction(audio: UploadFile = File(None), transcript: Optional[str] = Form(None)):
+async def voice_interaction(audio: UploadFile = File(None), transcript: Optional[str] = Form(None), language: Optional[str] = Form("en")):
     """Receives either client-side speech transcript or audio file."""
-    # Web Speech API provides high-accuracy client-side transcripts
     text = transcript or "What is the transport layer in networking?"
     return {
         "transcript": text,
+        "language": language or "en",
         "confidence": 0.98
     }
 
@@ -200,9 +224,14 @@ def evaluate_quiz(req: QuizEvaluateRequest):
 
 @app.post("/api/teach-back/evaluate")
 def evaluate_teach_back(req: TeachBackRequest):
-    result = teachback_evaluator.evaluate(req.concept_id, req.student_explanation)
+    result = teachback_evaluator.evaluate(req.concept_id, req.student_explanation, req.concept_name or "")
     learner_state.record_teachback(result)
     return result
+
+@app.post("/api/learner/misconceptions/resolve")
+def resolve_misconception(req: ResolveMisconceptionRequest):
+    learner_state.resolve_misconception(req.concept_name)
+    return {"message": "Misconception marked as resolved with evidence."}
 
 @app.get("/api/learner/progress")
 def get_learner_progress():
@@ -214,6 +243,24 @@ def update_profile(req: LearnerProfileRequest):
         name=req.name,
         education_level=req.education_level,
         learning_level=req.learning_level,
-        preferred_style=req.preferred_style
+        preferred_style=req.preferred_style,
+        language=req.language or "en"
     )
     return {"message": "Profile updated", "profile": learner_state.profile}
+
+@app.get("/api/search")
+def search_workspace(q: str = ""):
+    """Lightweight search across documents and concepts."""
+    query = q.lower().strip()
+    matched_docs = [d for d in DOCUMENTS.values() if query in d["title"].lower()]
+    matched_concepts = []
+    for doc_id in DOCUMENTS:
+        kg = kg_manager.get_graph(doc_id)
+        for c in kg.get("concepts", []):
+            if query in c["name"].lower() or query in c.get("summary", "").lower():
+                matched_concepts.append(c)
+    return {
+        "query": q,
+        "documents": matched_docs,
+        "concepts": matched_concepts[:6]
+    }

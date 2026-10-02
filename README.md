@@ -70,15 +70,34 @@ npm run dev -- --host 0.0.0.0 --port 3000
 ```
 Open `http://localhost:3000` in your web browser.
 
-### 3. Run Automated System Test Suite
+### 3. Run Automated Verification Suites
+
+**Comprehensive 34-Point System Test Suite:**
 ```bash
-python3 test_learnova_suite.py
+./backend/venv/bin/python test_learnova_suite_v2.py
 ```
-Validates all 11 core subsystems end-to-end.
+Validates all 34 subsystems end-to-end across multiple documents (PDF, DOCX, TXT), multilingual RAG (Kannada, Hindi), prompt injection defense, and misconception resolution.
+
+**Real-World Adversarial Validation Suite:**
+```bash
+./backend/venv/bin/python test_real_world_validation.py
+```
+Validates 15 adversarial tests on fresh, unseen documents: 10-page Operating Systems PDF, Digital Electronics DOCX, prompt-injection Business Strategy TXT, zero-hallucination rejection, and Feynman teach-backs.
 
 ---
 
-## 🎯 4-Minute Competition Demo Script
+## 📚 Key Competition Documentation
+
+- [FINAL_PROBLEM_STATEMENT_VALIDATION.md](file:///Users/kushal/Documents/projects/LEARNOVA/FINAL_PROBLEM_STATEMENT_VALIDATION.md): Forensic classification of every requirement (Real vs Fallback).
+- [FINAL_REAL_WORLD_TEST_REPORT.md](file:///Users/kushal/Documents/projects/LEARNOVA/FINAL_REAL_WORLD_TEST_REPORT.md): Results and telemetry from the 15-point real-world validation pass.
+- [DEMO_SCRIPT.md](file:///Users/kushal/Documents/projects/LEARNOVA/DEMO_SCRIPT.md): Official 3-minute competition presentation flow.
+- [MULTILINGUAL_ARCHITECTURE.md](file:///Users/kushal/Documents/projects/LEARNOVA/MULTILINGUAL_ARCHITECTURE.md): Cross-lingual RAG, Indic script tokenization, and technical code-switching.
+- [AVATAR_ARCHITECTURE.md](file:///Users/kushal/Documents/projects/LEARNOVA/AVATAR_ARCHITECTURE.md): LiveKit WebRTC, LiveAvatar Lite tokens, VAD interruptions, and local canvas fallback.
+- [LEARNOVA_QUALITY_REPORT.md](file:///Users/kushal/Documents/projects/LEARNOVA/LEARNOVA_QUALITY_REPORT.md): 20-category compliance scorecard.
+
+---
+
+## 🎯 3-Minute Competition Demo Flow (Summary)
 
 1. **Open LEARNOVA (`http://localhost:3000`)**:
    - Point out the clean, premium educational interface and brand tagline: *"Turn Information Into Understanding."*

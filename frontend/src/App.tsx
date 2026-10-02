@@ -7,32 +7,34 @@ import {
   LearnerAnalytics,
 } from './types';
 import { api } from './api';
-import { Navbar } from './components/Navbar';
+import { Sidebar } from './components/Sidebar';
 import { OnboardingModal } from './components/OnboardingModal';
 import { LandingScreen } from './screens/LandingScreen';
-import { ClassroomScreen } from './screens/ClassroomScreen';
+import { ClassroomWorkspace } from './screens/ClassroomWorkspace';
 import { KnowledgeGraphScreen } from './screens/KnowledgeGraphScreen';
 import { DocumentHubScreen } from './screens/DocumentHubScreen';
 import { AnalyticsScreen } from './screens/AnalyticsScreen';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<string>('classroom');
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
   const [documents, setDocuments] = useState<DocumentMeta[]>([]);
   const [activeDocId, setActiveDocId] = useState<string>('doc_networks_osi_101');
   const [concepts, setConcepts] = useState<ConceptNode[]>([]);
   const [relationships, setRelationships] = useState<RelationshipEdge[]>([]);
   const [activeConcept, setActiveConcept] = useState<ConceptNode | null>(null);
 
+  const [activeLanguage, setActiveLanguage] = useState<string>('en');
   const [profile, setProfile] = useState<LearnerProfile>({
     name: 'Alex Mercer',
     education_level: 'Undergraduate',
     learning_level: 'Beginner',
     preferred_style: 'Examples & Visuals',
+    language: 'en',
   });
   const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
   const [analytics, setAnalytics] = useState<LearnerAnalytics | null>(null);
 
-  // Initial Load: Documents & Knowledge Graph & Analytics
   useEffect(() => {
     loadDocuments();
     loadGraph(activeDocId);
@@ -70,6 +72,9 @@ export function App() {
       setAnalytics(prog);
       if (prog.learner_profile) {
         setProfile(prog.learner_profile);
+        if (prog.learner_profile.language) {
+          setActiveLanguage(prog.learner_profile.language);
+        }
       }
     } catch (e) {
       console.error('Failed to load analytics', e);
@@ -89,6 +94,9 @@ export function App() {
 
   const handleSaveProfile = async (newProfile: LearnerProfile) => {
     setProfile(newProfile);
+    if (newProfile.language) {
+      setActiveLanguage(newProfile.language);
+    }
     await api.updateProfile(newProfile);
     loadAnalytics();
   };
@@ -96,16 +104,19 @@ export function App() {
   const activeDoc = documents.find((d) => d.id === activeDocId) || documents[0] || null;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans text-slate-900">
-      {/* Navigation Header */}
-      <Navbar
+    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900 overflow-hidden">
+      {/* Calm Left Sidebar Shell */}
+      <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
+        collapsed={sidebarCollapsed}
+        setCollapsed={setSidebarCollapsed}
         profile={profile}
         onOpenProfile={() => setIsOnboardingOpen(true)}
+        activeCourseName={activeDoc?.title || 'Computer Networks & Protocols'}
       />
 
-      {/* Onboarding Preferences Modal */}
+      {/* Preferences Modal */}
       <OnboardingModal
         initialProfile={profile}
         isOpen={isOnboardingOpen}
@@ -113,61 +124,73 @@ export function App() {
         onSave={handleSaveProfile}
       />
 
-      {/* Screen Router */}
-      <main className="flex-1 flex flex-col">
+      {/* Main Workspace Router */}
+      <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {activeTab === 'landing' && (
-          <LandingScreen
-            onStartLearning={() => setActiveTab('classroom')}
-            onExploreGraph={() => setActiveTab('knowledge_graph')}
-            onUploadDoc={() => setActiveTab('documents')}
-          />
+          <div className="flex-1 overflow-y-auto">
+            <LandingScreen
+              onStartLearning={() => setActiveTab('classroom')}
+              onExploreGraph={() => setActiveTab('knowledge_graph')}
+              onUploadDoc={() => setActiveTab('documents')}
+            />
+          </div>
         )}
 
         {activeTab === 'classroom' && (
-          <ClassroomScreen
+          <ClassroomWorkspace
             activeDoc={activeDoc}
             concepts={concepts}
             activeConcept={activeConcept}
             onSelectConcept={(concept) => setActiveConcept(concept)}
-            onExploreGraph={() => setActiveTab('knowledge_graph')}
+            activeLanguage={activeLanguage}
+            onChangeLanguage={(lang) => {
+              setActiveLanguage(lang);
+              setProfile((p) => ({ ...p, language: lang }));
+            }}
           />
         )}
 
         {activeTab === 'knowledge_graph' && (
-          <KnowledgeGraphScreen
-            document={activeDoc}
-            concepts={concepts}
-            relationships={relationships}
-            activeConceptId={activeConcept?.id || 'c_transport_layer'}
-            onSelectConcept={(concept) => setActiveConcept(concept)}
-            onTeachConcept={(concept) => {
-              setActiveConcept(concept);
-              setActiveTab('classroom');
-            }}
-            onQuizConcept={(concept) => {
-              setActiveConcept(concept);
-              setActiveTab('classroom');
-            }}
-          />
+          <div className="flex-1 overflow-y-auto">
+            <KnowledgeGraphScreen
+              document={activeDoc}
+              concepts={concepts}
+              relationships={relationships}
+              activeConceptId={activeConcept?.id || 'c_transport_layer'}
+              onSelectConcept={(concept) => setActiveConcept(concept)}
+              onTeachConcept={(concept) => {
+                setActiveConcept(concept);
+                setActiveTab('classroom');
+              }}
+              onQuizConcept={(concept) => {
+                setActiveConcept(concept);
+                setActiveTab('classroom');
+              }}
+            />
+          </div>
         )}
 
         {activeTab === 'documents' && (
-          <DocumentHubScreen
-            documents={documents}
-            activeDocId={activeDocId}
-            onSelectDocument={handleSelectDocument}
-            onUploadFile={handleUploadFile}
-            onEnterClassroom={() => setActiveTab('classroom')}
-          />
+          <div className="flex-1 overflow-y-auto">
+            <DocumentHubScreen
+              documents={documents}
+              activeDocId={activeDocId}
+              onSelectDocument={handleSelectDocument}
+              onUploadFile={handleUploadFile}
+              onEnterClassroom={() => setActiveTab('classroom')}
+            />
+          </div>
         )}
 
-        {activeTab === 'analytics' && (
-          <AnalyticsScreen
-            analytics={analytics}
-            onEnterClassroom={() => setActiveTab('classroom')}
-          />
+        {(activeTab === 'analytics' || activeTab === 'revision') && (
+          <div className="flex-1 overflow-y-auto">
+            <AnalyticsScreen
+              analytics={analytics}
+              onEnterClassroom={() => setActiveTab('classroom')}
+            />
+          </div>
         )}
-      </main>
+      </div>
     </div>
   );
 }

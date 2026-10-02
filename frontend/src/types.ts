@@ -47,29 +47,49 @@ export interface VisualPayload {
   };
 }
 
+export interface LearningArtifact {
+  id: string;
+  type: 'comparison_table' | 'flowchart' | 'process_diagram' | 'timeline' | 'concept_map' | 'notes';
+  title: string;
+  data: any;
+  source?: {
+    page: number;
+    section: string;
+  };
+  saved?: boolean;
+  timestamp?: string;
+}
+
 export interface MisconceptionDiagnosis {
   classification: string;
   concept: string;
   misconception: string | null;
+  root_cause?: string | null;
+  prerequisite_gap?: string | null;
   severity: 'low' | 'medium' | 'high' | 'none';
   evidence: string | null;
+  counterexample?: string | null;
   remediation_strategy: string | null;
+  verification_check?: string | null;
   needs_remediation: boolean;
 }
 
 export interface TeacherResponse {
+  intent?: string;
+  spoken_text?: string;
   teacher_text: string;
-  teaching_mode: 'explain' | 'simplify' | 'example' | 'analogy' | 'visual' | 'deep_dive' | 'socratic' | 'remediate';
+  teaching_mode: 'explain' | 'simplify' | 'example' | 'analogy' | 'visual' | 'deep_dive' | 'socratic' | 'exam' | 'remediate';
   active_concept: string;
   misconception_detected: MisconceptionDiagnosis | null;
   visual_element: VisualPayload | null;
   citations: Citation[];
   follow_up_prompt?: string;
+  language?: string;
 }
 
 export interface QuizItem {
   id: string;
-  type: 'mcq' | 'true_false' | 'short_answer';
+  type: 'mcq' | 'true_false' | 'short_answer' | 'scenario';
   concept: string;
   question: string;
   options: string[];
@@ -126,4 +146,5 @@ export interface LearnerAnalytics {
   misconception_count: number;
   recent_activity: Array<{ time: string; action: string; type: string }>;
   revision_plan: Array<{ timeframe: string; task: string; priority: string }>;
+  recent_evidence?: Array<{ timestamp: string; concept: string; delta: any; reason: string; type: string }>;
 }
