@@ -7,6 +7,26 @@ Turn Information Into Understanding.
 import os
 import shutil
 from typing import Optional, List, Dict, Any
+
+def load_env():
+    """Loads variables from .env into os.environ without requiring external packages."""
+    for path in [os.path.join(os.path.dirname(__file__), "..", ".env"), os.path.join(os.path.dirname(__file__), ".env")]:
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            key = k.strip()
+                            val = v.strip().strip("'\"")
+                            if key:
+                                os.environ[key] = val
+            except Exception:
+                pass
+
+load_env()
+
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel

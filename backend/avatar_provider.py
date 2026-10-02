@@ -17,9 +17,9 @@ class AvatarService:
     async def create_avatar_session(self) -> Dict[str, Any]:
         """
         Generates a secure, short-lived avatar streaming token for the client.
-        If no cloud credentials are configured, safely returns the fallback status.
-        Never exposes the raw HEYGEN_API_KEY to the client browser.
         """
+        self.heygen_key = os.getenv("HEYGEN_API_KEY", "")
+        self.avatar_id = os.getenv("HEYGEN_AVATAR_ID", "")
         if self.heygen_key:
             try:
                 # HeyGen LiveAvatar interactive streaming session endpoint

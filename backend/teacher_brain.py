@@ -16,6 +16,37 @@ class TeacherBrain:
     def __init__(self):
         self.gemini_key = os.getenv("GEMINI_API_KEY", "")
 
+    async def _call_gemini(self, prompt: str, system_prompt: str = "") -> Optional[Dict[str, Any]]:
+        """Invokes Google Gemini REST API when GEMINI_API_KEY is configured."""
+        api_key = os.getenv("GEMINI_API_KEY", self.gemini_key)
+        if not api_key:
+            return None
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={api_key}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 800}
+        }
+        if system_prompt:
+            payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.post(url, json=payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    candidates = data.get("candidates", [])
+                    if candidates:
+                        text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        return {
+                            "provider": "gemini",
+                            "model": "gemini-1.5-flash",
+                            "text": text.strip(),
+                            "latency_ms": round(res.elapsed.total_seconds() * 1000, 2)
+                        }
+        except Exception:
+            return None
+        return None
+
     def detect_language(self, text: str, user_preference: Optional[str] = None) -> str:
         """Detects language script or explicit user requests ('in Kannada', 'in Hindi')."""
         t = text.lower()
