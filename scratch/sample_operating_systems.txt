@@ -1,0 +1,10 @@
+# Operating Systems: Concurrency & Synchronization
+
+## Process Synchronization
+When multiple concurrent processes access shared memory, race conditions occur unless mutual exclusion is enforced.
+
+## Critical Sections
+A critical section is a piece of code that accesses shared resources. Only one process may execute within its critical section at any given time.
+
+## Semaphores & Mutexes
+A mutex provides binary mutual exclusion. A counting semaphore maintains a counter that represents available resource instances. Wait() decrements the counter, while Signal() increments it.

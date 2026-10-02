@@ -30,18 +30,20 @@ Unlike conventional question-answering bots that merely search PDFs and output g
 4. **Dynamic Visual Whiteboard**:
    - Renders structured visual payloads (flowcharts, comparison tables, process diagrams, timelines) directly synchronized with teacher explanations.
 
-5. **Animated AI Avatar & Voice Delivery**:
-   - High-fidelity vector avatar with real-time lip sync visemes animated according to voice synthesis.
-   - Natural eye blinking, facial expressions, and live equalizer audio spectrum analyzer.
+5. **Authoritative AI Avatar & Voice Delivery (Professor Nova)**:
+   - Features the authoritative Professor Nova digital robot teacher character.
+   - Natural eyelid blinking, subtle ambient breathing, active speech cadence, and responsive voice-reactive waveform.
+   - Provider abstraction: `AvatarProvider` architecture separating `LocalAvatarProvider` (no cloud keys needed) and `LiveAvatarProvider` (WebRTC streaming ready).
    - **Graceful Degradation Ladder**: Built-in browser-native Web Speech STT/TTS ensures 100% functionality with zero crashes even if external cloud keys are omitted.
 
 6. **Feynman Teach-Back Evaluator**:
    - Tests student mastery by challenging them to teach the concept back in their own words.
    - Automatically scores **Understanding Depth (%)**, **Factual Accuracy (%)**, highlights covered vs. missing concepts, and provides actionable pedagogical feedback.
 
-7. **Evidence-Based Learning Analytics & Revision Plan**:
-   - Mastery metrics derived directly from student interactions (Mastered, Improving, Needs Review).
-   - Generates a structured 3-day personalized revision schedule.
+7. **Consolidated Cognitive Progress & Revision Hub**:
+   - Streamlined information architecture (`Home`, `Learn`, `Knowledge`, `Documents`, `Progress`).
+   - Mastery metrics derived directly from student interactions (Needs Attention, Improving, Proven Mastery).
+   - Embedded 3-stage personalized revision schedule (Today, Tomorrow, Upcoming).
 
 ---
 

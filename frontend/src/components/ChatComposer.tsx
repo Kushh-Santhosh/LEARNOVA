@@ -2,14 +2,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   Mic,
   MicOff,
-  Send,
-  Sparkles,
-  Command,
-  Languages,
-  BookOpen,
+  ArrowUp,
+  Plus,
   HelpCircle,
   Award,
-  Layers
+  Layers,
+  Sparkles,
+  BookOpen,
+  ChevronDown,
+  Globe
 } from 'lucide-react';
 
 interface ChatComposerProps {
@@ -30,28 +31,44 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onChangeLanguage,
 }) => {
   const [text, setText] = useState('');
-  const [activeMode, setActiveMode] = useState('explain');
-  const [showCommands, setShowCommands] = useState(false);
+  const [selectedStyle, setSelectedStyle] = useState('explain');
+  const [showTools, setShowTools] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const commandItems = [
-    { cmd: '/quiz', label: 'Generate a comprehension quiz', mode: 'quiz_me', icon: HelpCircle },
-    { cmd: '/teachback', label: 'Challenge me to teach it back', mode: 'teach_back', icon: Award },
-    { cmd: '/visual', label: 'Create a visual diagram or flowchart', mode: 'visual', icon: Layers },
-    { cmd: '/simplify', label: 'Explain simpler without jargon', mode: 'simplify', icon: BookOpen },
-    { cmd: '/socratic', label: 'Guide me with a Socratic question', mode: 'socratic', icon: Sparkles },
+  const teachingStyles = [
+    { id: 'explain', label: 'Explain' },
+    { id: 'socratic', label: 'Socratic' },
+    { id: 'simplify', label: 'Simplify' },
+    { id: 'quiz', label: 'Quiz' },
+    { id: 'visual', label: 'Visual' },
+  ];
+
+  const tools = [
+    { id: 'quiz', label: 'Comprehension Quiz', icon: HelpCircle, prompt: 'Quiz me on this concept to test my understanding.' },
+    { id: 'teach_back', label: 'Teach-Back Challenge', icon: Award, prompt: 'Challenge me to teach this concept back to you.' },
+    { id: 'visual', label: 'Generate Visual Diagram', icon: Layers, prompt: 'Create a visual diagram or flowchart comparing the key mechanisms.' },
+    { id: 'simplify', label: 'Explain Simply (No Jargon)', icon: BookOpen, prompt: 'Explain this in the simplest possible terms with a real-life analogy.' },
+    { id: 'socratic', label: 'Socratic Guidance', icon: Sparkles, prompt: 'Ask me a guiding Socratic question instead of telling me the answer.' },
   ];
 
   const languages = [
     { code: 'en', label: 'English' },
-    { code: 'kn', label: 'ಕನ್ನಡ (Kannada)' },
     { code: 'hi', label: 'हिन्दी (Hindi)' },
+    { code: 'kn', label: 'ಕನ್ನಡ (Kannada)' },
     { code: 'te', label: 'తెలుగు (Telugu)' },
     { code: 'ta', label: 'தமிழ் (Tamil)' },
   ];
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  // Auto-resize textarea smoothly
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 140)}px`;
+    }
+  }, [text]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -60,36 +77,40 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
 
   const handleSend = () => {
     if (!text.trim() || isSending) return;
-    onSendMessage(text, activeMode, activeLanguage);
+    onSendMessage(text, selectedStyle, activeLanguage);
     setText('');
-    setShowCommands(false);
+    setShowTools(false);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
   };
 
-  const selectCommand = (cmd: typeof commandItems[0]) => {
-    setShowCommands(false);
-    onSendMessage(`Let's execute ${cmd.cmd}`, cmd.mode, activeLanguage);
+  const handleSelectTool = (tool: typeof tools[0]) => {
+    setShowTools(false);
+    onSendMessage(tool.prompt, tool.id, activeLanguage);
   };
 
   return (
-    <div className="relative w-full max-w-4xl mx-auto p-3">
-      {/* Command Menu Popover */}
-      {showCommands && (
-        <div className="absolute bottom-full mb-2 left-4 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-40 animate-fadeIn text-xs">
-          <div className="px-2 py-1 text-[10px] uppercase font-bold text-slate-400">
-            Pedagogical Commands
+    <div className="relative w-full max-w-3xl mx-auto px-4 pb-4 pt-1 select-none">
+      {/* Tool popover menu */}
+      {showTools && (
+        <div className="absolute bottom-full mb-3 left-4 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-2 z-40 animate-fadeIn text-xs">
+          <div className="px-2.5 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+            Teaching Tools
           </div>
-          {commandItems.map((c) => {
-            const Icon = c.icon;
+          {tools.map((t) => {
+            const Icon = t.icon;
             return (
               <button
-                key={c.cmd}
-                onClick={() => selectCommand(c)}
-                className="w-full flex items-center space-x-2.5 p-2 rounded-xl text-left hover:bg-blue-50 hover:text-blue-900 transition-colors"
+                key={t.id}
+                onClick={() => handleSelectTool(t)}
+                className="w-full flex items-center space-x-2.5 p-2 rounded-xl text-left hover:bg-slate-50 transition-colors cursor-pointer group"
               >
-                <Icon className="w-4 h-4 text-blue-600 shrink-0" />
+                <div className="p-1.5 rounded-lg bg-slate-100 group-hover:bg-slate-900 group-hover:text-white transition-colors">
+                  <Icon className="w-3.5 h-3.5" />
+                </div>
                 <div>
-                  <div className="font-bold text-slate-800">{c.cmd}</div>
-                  <div className="text-[10px] text-slate-500">{c.label}</div>
+                  <div className="font-medium text-slate-800 text-xs">{t.label}</div>
                 </div>
               </button>
             );
@@ -97,12 +118,9 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         </div>
       )}
 
-      {/* Language Selector Dropdown */}
+      {/* Language dropdown popover */}
       {showLangMenu && (
-        <div className="absolute bottom-full mb-2 left-28 w-48 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-40 animate-fadeIn text-xs">
-          <div className="px-2 py-1 text-[10px] uppercase font-bold text-slate-400">
-            Teaching Language
-          </div>
+        <div className="absolute bottom-full mb-3 right-4 w-44 bg-white rounded-2xl shadow-xl border border-slate-200 p-1.5 z-40 animate-fadeIn text-xs">
           {languages.map((l) => (
             <button
               key={l.code}
@@ -110,106 +128,100 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
                 onChangeLanguage(l.code);
                 setShowLangMenu(false);
               }}
-              className={`w-full text-left px-2.5 py-1.5 rounded-lg transition-colors flex items-center justify-between ${
-                activeLanguage === l.code ? 'bg-blue-50 text-blue-900 font-bold' : 'hover:bg-slate-50 text-slate-700'
+              className={`w-full text-left px-3 py-2 rounded-xl transition-colors cursor-pointer flex items-center justify-between ${
+                activeLanguage === l.code ? 'bg-slate-100 font-semibold text-slate-900' : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
               <span>{l.label}</span>
-              {activeLanguage === l.code && <span className="w-1.5 h-1.5 rounded-full bg-blue-600" />}
+              {activeLanguage === l.code && <span className="w-1.5 h-1.5 rounded-full bg-slate-900" />}
             </button>
           ))}
         </div>
       )}
 
       {/* Main Composer Box */}
-      <div className="bg-white rounded-2xl border border-slate-300 shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-100 transition-all p-2 flex flex-col">
-        {/* Input Row */}
-        <div className="flex items-center space-x-2 px-2">
-          <input
-            ref={inputRef}
-            type="text"
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              if (e.target.value.startsWith('/')) {
-                setShowCommands(true);
-              } else {
-                setShowCommands(false);
-              }
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              isListening
-                ? 'Listening to your voice...'
-                : 'Ask Professor Nova anything about this lesson... (type / for commands)'
-            }
-            className="flex-1 py-2 text-xs text-slate-800 placeholder:text-slate-400 outline-hidden bg-transparent"
-          />
+      <div className="rounded-3xl bg-white border border-slate-200 shadow-sm focus-within:border-slate-400 focus-within:shadow-md transition-all duration-200 p-3">
+        {/* Text Input Area */}
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Ask Professor Nova anything..."
+          rows={1}
+          disabled={isSending}
+          className="w-full resize-none bg-transparent outline-none text-slate-900 placeholder-slate-400 text-sm px-2 pt-1 pb-2 max-h-36 leading-relaxed"
+        />
 
-          <button
-            type="button"
-            onClick={onToggleListening}
-            className={`p-2 rounded-xl transition-all shrink-0 ${
-              isListening
-                ? 'bg-red-500 text-white animate-pulse shadow-xs'
-                : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
-            }`}
-            title={isListening ? 'Stop Recording' : 'Speak to Professor Nova'}
-          >
-            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={!text.trim() || isSending}
-            className="p-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-30 text-white shrink-0 shadow-2xs transition-colors"
-            title="Send Message"
-          >
-            <Send className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Toolbar Row: Mode Selector + Language Pill + Quick Shortcut Pill */}
-        <div className="flex items-center justify-between pt-2 px-2 mt-1 border-t border-slate-100 text-[11px] text-slate-500">
-          <div className="flex items-center space-x-1.5">
-            {/* Mode selection buttons */}
-            {['explain', 'simplify', 'socratic', 'exam'].map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setActiveMode(m)}
-                className={`px-2 py-0.5 rounded-lg capitalize font-medium transition-colors ${
-                  activeMode === m
-                    ? 'bg-slate-900 text-white font-semibold'
-                    : 'text-slate-500 hover:bg-slate-100'
-                }`}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center space-x-2">
-            {/* Language Switcher Pill */}
+        {/* Action Row */}
+        <div className="flex items-center justify-between pt-1 border-t border-slate-100">
+          {/* Left tools & mode selector */}
+          <div className="flex items-center space-x-1 overflow-x-auto py-0.5 scrollbar-none">
+            {/* Tool button */}
             <button
-              type="button"
-              onClick={() => setShowLangMenu(!showLangMenu)}
-              className="flex items-center space-x-1 px-2 py-0.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold"
-              title="Change teaching language"
+              onClick={() => setShowTools(!showTools)}
+              className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+              title="Add action or tool"
             >
-              <Languages className="w-3 h-3 text-blue-600" />
-              <span>{activeLanguage.toUpperCase()}</span>
+              <Plus className="w-4 h-4" />
             </button>
 
-            {/* Quick Slash Menu Toggle */}
+            {/* Audio Speech Mic Button */}
             <button
-              type="button"
-              onClick={() => setShowCommands(!showCommands)}
-              className="p-1 rounded-md text-slate-400 hover:text-slate-700"
-              title="Commands Menu"
+              onClick={onToggleListening}
+              className={`p-1.5 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
+                isListening
+                  ? 'bg-rose-500 text-white shadow-xs shadow-rose-500/40 animate-pulse'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+              }`}
+              title={isListening ? 'Listening... click to stop' : 'Speak to Professor Nova'}
             >
-              <Command className="w-3.5 h-3.5" />
+              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+
+            <span className="w-px h-3.5 bg-slate-200 mx-1" />
+
+            {/* Teaching Style Pills */}
+            <div className="flex items-center space-x-1">
+              {teachingStyles.map((style) => (
+                <button
+                  key={style.id}
+                  onClick={() => setSelectedStyle(style.id)}
+                  className={`px-2.5 py-1 rounded-xl text-xs transition-colors cursor-pointer ${
+                    selectedStyle === style.id
+                      ? 'bg-slate-900 text-white font-medium'
+                      : 'text-slate-500 hover:text-slate-800 hover:bg-slate-100'
+                  }`}
+                >
+                  {style.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Right Language & Send Button */}
+          <div className="flex items-center space-x-1.5 shrink-0 pl-2">
+            <button
+              onClick={() => setShowLangMenu(!showLangMenu)}
+              className="px-2 py-1 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl text-xs font-medium flex items-center gap-1 transition-colors cursor-pointer"
+              title="Change teaching language"
+            >
+              <Globe className="w-3.5 h-3.5 text-slate-400" />
+              <span>{languages.find((l) => l.code === activeLanguage)?.label.split(' ')[0] || 'English'}</span>
+              <ChevronDown className="w-3 h-3 text-slate-400" />
+            </button>
+
+            <button
+              onClick={handleSend}
+              disabled={!text.trim() || isSending}
+              className={`w-8 h-8 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                text.trim() && !isSending
+                  ? 'bg-slate-900 hover:bg-slate-800 text-white shadow-xs'
+                  : 'bg-slate-100 text-slate-300 cursor-not-allowed'
+              }`}
+              title="Send message"
+            >
+              <ArrowUp className="w-4 h-4" />
             </button>
           </div>
         </div>

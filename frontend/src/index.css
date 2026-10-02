@@ -52,6 +52,18 @@
   50% { opacity: 0.85; transform: scale(1.03); }
 }
 
+@keyframes avatar-breath {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-1.5px) scale(1.008); }
+}
+
+@keyframes avatar-nod {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  25% { transform: translateY(-1px) scale(1.01); }
+  75% { transform: translateY(1px) scale(0.995); }
+}
+
 .animate-pulse-gentle {
   animation: pulse-gentle 2.5s infinite ease-in-out;
 }
+

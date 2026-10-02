@@ -9,7 +9,7 @@ import {
 import { api } from './api';
 import { Sidebar } from './components/Sidebar';
 import { OnboardingModal } from './components/OnboardingModal';
-import { LandingScreen } from './screens/LandingScreen';
+import { HomeScreen } from './screens/HomeScreen';
 import { ClassroomWorkspace } from './screens/ClassroomWorkspace';
 import { KnowledgeGraphScreen } from './screens/KnowledgeGraphScreen';
 import { DocumentHubScreen } from './screens/DocumentHubScreen';
@@ -18,6 +18,8 @@ import { AnalyticsScreen } from './screens/AnalyticsScreen';
 export function App() {
   const [activeTab, setActiveTab] = useState<string>('classroom');
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState<boolean>(false);
+
   const [documents, setDocuments] = useState<DocumentMeta[]>([]);
   const [activeDocId, setActiveDocId] = useState<string>('doc_networks_osi_101');
   const [concepts, setConcepts] = useState<ConceptNode[]>([]);
@@ -32,7 +34,7 @@ export function App() {
     preferred_style: 'Examples & Visuals',
     language: 'en',
   });
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
+  const [isPreferencesOpen, setIsPreferencesOpen] = useState(false);
   const [analytics, setAnalytics] = useState<LearnerAnalytics | null>(null);
 
   useEffect(() => {
@@ -104,38 +106,51 @@ export function App() {
   const activeDoc = documents.find((d) => d.id === activeDocId) || documents[0] || null;
 
   return (
-    <div className="min-h-screen bg-slate-50 flex font-sans text-slate-900 overflow-hidden">
-      {/* Calm Left Sidebar Shell */}
+    <div className="min-h-screen bg-[#fafaf9] flex font-sans text-slate-900 overflow-hidden">
+      {/* Calm, Minimal Sidebar with Mobile Drawer Support */}
       <Sidebar
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         collapsed={sidebarCollapsed}
         setCollapsed={setSidebarCollapsed}
         profile={profile}
-        onOpenProfile={() => setIsOnboardingOpen(true)}
+        onOpenProfile={() => setIsPreferencesOpen(true)}
         activeCourseName={activeDoc?.title || 'Computer Networks & Protocols'}
+        isMobileOpen={isMobileNavOpen}
+        onCloseMobile={() => setIsMobileNavOpen(false)}
       />
 
-      {/* Preferences Modal */}
+      {/* Learning Preferences Modal */}
       <OnboardingModal
         initialProfile={profile}
-        isOpen={isOnboardingOpen}
-        onClose={() => setIsOnboardingOpen(false)}
+        isOpen={isPreferencesOpen}
+        onClose={() => setIsPreferencesOpen(false)}
         onSave={handleSaveProfile}
       />
 
       {/* Main Workspace Router */}
-      <div className="flex-1 flex flex-col h-screen overflow-hidden">
-        {activeTab === 'landing' && (
+      <main className="flex-1 flex flex-col h-screen overflow-hidden">
+        {/* Tab 1: Calm Home Screen */}
+        {activeTab === 'home' && (
           <div className="flex-1 overflow-y-auto">
-            <LandingScreen
-              onStartLearning={() => setActiveTab('classroom')}
-              onExploreGraph={() => setActiveTab('knowledge_graph')}
-              onUploadDoc={() => setActiveTab('documents')}
+            <HomeScreen
+              profile={profile}
+              activeDoc={activeDoc}
+              documents={documents}
+              concepts={concepts}
+              analytics={analytics}
+              onContinueLesson={() => setActiveTab('classroom')}
+              onOpenCourse={(docId) => {
+                handleSelectDocument(docId);
+                setActiveTab('classroom');
+              }}
+              onOpenDocuments={() => setActiveTab('documents')}
+              onOpenProgress={() => setActiveTab('progress')}
             />
           </div>
         )}
 
+        {/* Tab 2: Learn (Classroom Workspace) */}
         {activeTab === 'classroom' && (
           <ClassroomWorkspace
             activeDoc={activeDoc}
@@ -147,9 +162,24 @@ export function App() {
               setActiveLanguage(lang);
               setProfile((p) => ({ ...p, language: lang }));
             }}
+            onOpenMobileNav={() => setIsMobileNavOpen(true)}
           />
         )}
 
+        {/* Tab 3: Documents Hub */}
+        {activeTab === 'documents' && (
+          <div className="flex-1 overflow-y-auto">
+            <DocumentHubScreen
+              documents={documents}
+              activeDocId={activeDocId}
+              onSelectDocument={handleSelectDocument}
+              onUploadFile={handleUploadFile}
+              onEnterClassroom={() => setActiveTab('classroom')}
+            />
+          </div>
+        )}
+
+        {/* Tab 4: Knowledge Graph */}
         {activeTab === 'knowledge_graph' && (
           <div className="flex-1 overflow-y-auto">
             <KnowledgeGraphScreen
@@ -170,19 +200,8 @@ export function App() {
           </div>
         )}
 
-        {activeTab === 'documents' && (
-          <div className="flex-1 overflow-y-auto">
-            <DocumentHubScreen
-              documents={documents}
-              activeDocId={activeDocId}
-              onSelectDocument={handleSelectDocument}
-              onUploadFile={handleUploadFile}
-              onEnterClassroom={() => setActiveTab('classroom')}
-            />
-          </div>
-        )}
-
-        {(activeTab === 'analytics' || activeTab === 'revision') && (
+        {/* Tab 5: Consolidated Progress & Revision */}
+        {(activeTab === 'progress' || activeTab === 'analytics' || activeTab === 'revision') && (
           <div className="flex-1 overflow-y-auto">
             <AnalyticsScreen
               analytics={analytics}
@@ -190,7 +209,7 @@ export function App() {
             />
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }
