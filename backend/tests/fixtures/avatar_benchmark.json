@@ -1,0 +1,161 @@
+{
+  "benchmark_metadata": {
+    "version": "1.0.0",
+    "challenge": "Cost-Efficient Live Avatar for Elevate & LEARNOVA",
+    "target_cost_per_minute_inr": 10.0,
+    "evaluated_modes": ["mode_a_local", "mode_b_hq", "mode_c_text"],
+    "total_cases": 15
+  },
+  "test_cases": [
+    {
+      "id": "CASE-01",
+      "category": "short_neutral",
+      "style": "neutral",
+      "speed_wpm": 150,
+      "emotion": "idle",
+      "type": "educational",
+      "text": "Yes, that's correct.",
+      "description": "Very short 4-word response testing fast start latency and minimal viseme sequence."
+    },
+    {
+      "id": "CASE-02",
+      "category": "short_questioning",
+      "style": "questioning",
+      "speed_wpm": 150,
+      "emotion": "questioning",
+      "type": "educational",
+      "text": "What do you think happens to data packets if the TCP window size drops to zero?",
+      "description": "Short targeted question testing upward inquisitive brow and vocal pitch inflection."
+    },
+    {
+      "id": "CASE-03",
+      "category": "medium_explanatory",
+      "style": "explanatory",
+      "speed_wpm": 150,
+      "emotion": "explaining",
+      "type": "educational",
+      "text": "In Python, a list is a mutable ordered sequence, whereas a tuple is immutable. Once you create a tuple, its items cannot be reassigned or modified.",
+      "description": "Medium educational explanation covering fundamental Python data structures."
+    },
+    {
+      "id": "CASE-04",
+      "category": "medium_encouraging",
+      "style": "encouraging",
+      "speed_wpm": 140,
+      "emotion": "encouraging",
+      "type": "educational",
+      "text": "Outstanding work on that recursive function! You handled the base case cleanly, which prevents the stack overflow.",
+      "description": "Encouraging praise testing warm smiling mouth shapes and head nod expression."
+    },
+    {
+      "id": "CASE-05",
+      "category": "medium_remediation",
+      "style": "remediation",
+      "speed_wpm": 135,
+      "emotion": "remediating",
+      "type": "educational",
+      "text": "Common misconception: HTTP and TCP are not competing protocols. HTTP operates at the application layer, while TCP provides reliable transport underneath it.",
+      "description": "Remediation response addressing student misconception with empathetic guidance."
+    },
+    {
+      "id": "CASE-06",
+      "category": "long_explanatory",
+      "style": "deep_pedagogy",
+      "speed_wpm": 155,
+      "emotion": "explaining",
+      "type": "educational",
+      "text": "To build scalable backend microservices, three core pillars must be established. First, asynchronous non-blocking I/O allows thousands of concurrent network connections without thread exhaustion. Second, persistent database connections should be pooled and guarded by connection limits. Third, idempotent request handlers guarantee that retried network requests never cause duplicate financial or state mutations.",
+      "description": "Multi-sentence technical architectural explanation testing multi-stage expression curves and sustained lip-sync."
+    },
+    {
+      "id": "CASE-07",
+      "category": "elevate_negotiation_short",
+      "style": "diplomatic",
+      "speed_wpm": 145,
+      "emotion": "questioning",
+      "type": "negotiation",
+      "text": "I hear your target budget of eight dollars, but can we meet in the middle at nine dollars if we commit to an annual contract?",
+      "description": "Elevate negotiation challenge case: short diplomatic concession exploration."
+    },
+    {
+      "id": "CASE-08",
+      "category": "elevate_negotiation_firm",
+      "style": "assertive",
+      "speed_wpm": 150,
+      "emotion": "explaining",
+      "type": "negotiation",
+      "text": "We cannot offer a thirty percent discount on this license tier because our server operating costs and custom SLA guarantee dedicated uptime. However, we can include onboarding training at no additional charge.",
+      "description": "Elevate negotiation challenge case: firm counter-proposal balancing price with bundled value."
+    },
+    {
+      "id": "CASE-09",
+      "category": "elevate_negotiation_collaborative",
+      "style": "collaborative",
+      "speed_wpm": 140,
+      "emotion": "encouraging",
+      "type": "negotiation",
+      "text": "If you are able to sign the procurement agreement before Friday, I can get executive approval to waive the initial setup fee entirely. Does that structure work for your procurement committee?",
+      "description": "Elevate negotiation challenge case: time-sensitive closing trade-off with question ending."
+    },
+    {
+      "id": "CASE-10",
+      "category": "fast_speech",
+      "style": "rapid_summary",
+      "speed_wpm": 185,
+      "emotion": "explaining",
+      "type": "educational",
+      "text": "Quick checkpoint: DNS translates domain names into IP addresses, TCP establishes connection handshakes, and TLS secures the payload with symmetric encryption keys.",
+      "description": "High-speed rapid speech (185 WPM) testing viseme compression and lack of drift."
+    },
+    {
+      "id": "CASE-11",
+      "category": "slow_speech",
+      "style": "deliberate_pedagogy",
+      "speed_wpm": 110,
+      "emotion": "remediating",
+      "type": "educational",
+      "text": "Take your time. Look at line four. What happens when the pointer dereferences null?",
+      "description": "Slow deliberate pacing (110 WPM) testing extended vowel holds and pauses."
+    },
+    {
+      "id": "CASE-12",
+      "category": "celebratory_achievement",
+      "style": "celebrating",
+      "speed_wpm": 150,
+      "emotion": "celebrating",
+      "type": "educational",
+      "text": "Brilliant! You scored 100% on the Operating Systems mastery checkpoint! Every single concept is locked in.",
+      "description": "Delighted celebratory reaction testing expressive wide smile and sparkle eyes."
+    },
+    {
+      "id": "CASE-13",
+      "category": "edge_case_minimal",
+      "style": "curt",
+      "speed_wpm": 150,
+      "emotion": "idle",
+      "type": "edge_case",
+      "text": "No.",
+      "description": "Single-word edge case testing zero-crash resilience and minimal timeline duration."
+    },
+    {
+      "id": "CASE-14",
+      "category": "edge_case_empty",
+      "style": "empty",
+      "speed_wpm": 150,
+      "emotion": "idle",
+      "type": "edge_case",
+      "text": "",
+      "description": "Empty input edge case verifying graceful default resting state."
+    },
+    {
+      "id": "CASE-15",
+      "category": "edge_case_very_long",
+      "style": "exhaustive_lecture",
+      "speed_wpm": 150,
+      "emotion": "explaining",
+      "type": "educational",
+      "text": "Let us trace the complete lifecycle of a modern web request from the moment you hit Enter in the address bar. First, the browser parses the URL protocol and hostname, checking local DNS cache, operating system resolver cache, and recursive nameservers until the authoritative DNS server returns the destination IP address. Next, the client initiates a three-way TCP handshake over port 443 with SYN, SYN-ACK, and ACK flags. On top of TCP, the TLS 1.3 handshake negotiates cipher suites and performs Diffie-Hellman key exchange within a single round trip. Then the HTTP/2 client transmits multiplexed binary frames containing the encrypted GET request headers. The edge reverse proxy terminates TLS, applies rate limits, evaluates caching rules, and forwards the upstream request to the application gateway. Finally, the backend application deserializes the request, queries the database, formats the JSON response, and streams chunks back down the connection.",
+      "description": "Exhaustive 170+ word response testing memory stability, long timeline alignment, and lack of visual freeze."
+    }
+  ]
+}

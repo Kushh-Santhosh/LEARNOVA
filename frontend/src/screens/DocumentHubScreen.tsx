@@ -13,7 +13,7 @@ import {
 
 interface DocumentHubScreenProps {
   documents: DocumentMeta[];
-  activeDocId: string;
+  activeDocId: string | null;
   onSelectDocument: (docId: string) => void;
   onUploadFile: (file: File) => Promise<void>;
   onEnterClassroom: () => void;
@@ -43,10 +43,10 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
   ];
 
   const handleFileProcess = async (file: File) => {
-    const validExtensions = ['.pdf', '.txt', '.md', '.markdown'];
+    const validExtensions = ['.pdf', '.docx', '.doc', '.txt', '.md', '.markdown'];
     const hasValidExt = validExtensions.some((ext) => file.name.toLowerCase().endsWith(ext));
     if (!hasValidExt) {
-      setUploadError('Please select a valid PDF, Markdown, or TXT file.');
+      setUploadError('Please select a valid PDF, Word (DOCX), Markdown, or TXT file.');
       return;
     }
 
@@ -116,6 +116,7 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
 
       {/* Clean Drag & Drop Area */}
       <div
+        data-guide-id="btn-upload-dropzone"
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragging(true);
@@ -138,7 +139,7 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
             }
           }}
           className="hidden"
-          accept=".pdf,.txt,.md"
+          accept=".pdf,.docx,.doc,.txt,.md,.markdown"
         />
         <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-600 mb-3">
           <UploadCloud className="w-5 h-5" />
@@ -147,7 +148,7 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
           Drop your study document here, or <span className="text-blue-600 font-semibold underline underline-offset-2">browse</span>
         </div>
         <p className="text-xs text-slate-400 mt-1">
-          Supports PDF, Markdown, and TXT (up to 25MB)
+          Supports PDF, Word (DOCX), Markdown, and TXT with scalable indexing
         </p>
       </div>
 
@@ -177,11 +178,12 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
         </div>
 
         <div className="space-y-2.5">
-          {filteredDocs.map((doc) => {
+          {filteredDocs.map((doc, idx) => {
             const isSelected = doc.id === activeDocId;
             return (
               <div
                 key={doc.id}
+                data-guide-id={idx === 0 ? 'btn-study-document' : undefined}
                 onClick={() => {
                   onSelectDocument(doc.id);
                   onEnterClassroom();
@@ -201,6 +203,15 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
                       <h4 className="text-xs font-semibold text-slate-900 truncate group-hover:text-blue-600 transition-colors">
                         {doc.title}
                       </h4>
+                      {doc.is_demo ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200/80 font-medium">
+                          Demo Course
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-medium">
+                          User Material
+                        </span>
+                      )}
                       {isSelected && (
                         <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 font-medium">
                           Active Course
@@ -209,7 +220,7 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
                     </div>
                     {/* Quiet metadata */}
                     <div className="text-[11px] text-slate-400 mt-0.5">
-                      {doc.file_type.toUpperCase()} • 12 concepts mapped • Grounded source
+                      {doc.file_type.toUpperCase()} • {doc.concept_count || doc.sections?.length || 10} concepts mapped • {doc.language ? `Lang: ${doc.language.toUpperCase()}` : 'Grounded source'}
                     </div>
                   </div>
                 </div>

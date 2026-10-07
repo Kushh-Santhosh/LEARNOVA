@@ -32,6 +32,28 @@ class DocumentProcessor:
         return cleaned
 
     @classmethod
+    def detect_dominant_language(cls, sample_text: str) -> str:
+        """
+        Detects dominant script across English, Hindi, Kannada, Telugu, and Tamil.
+        Uses exact Unicode block character frequency.
+        """
+        if not sample_text:
+            return "en"
+        
+        kn_count = len(re.findall(r"[\u0C80-\u0CFF]", sample_text))
+        hi_count = len(re.findall(r"[\u0900-\u097F]", sample_text))
+        te_count = len(re.findall(r"[\u0C00-\u0C7F]", sample_text))
+        ta_count = len(re.findall(r"[\u0B80-\u0BFF]", sample_text))
+        
+        counts = [("kn", kn_count), ("hi", hi_count), ("te", te_count), ("ta", ta_count)]
+        counts.sort(key=lambda x: x[1], reverse=True)
+        top_lang, top_count = counts[0]
+        
+        if top_count > 10:
+            return top_lang
+        return "en"
+
+    @classmethod
     def extract_from_pdf(cls, file_path: str, doc_id: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """Extract pages, sections, and structured chunks from PDF."""
         reader = PdfReader(file_path)

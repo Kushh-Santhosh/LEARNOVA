@@ -42,6 +42,21 @@ class LearnerState:
         self.recent_activity: List[Dict[str, Any]] = [
             {"time": "Just now", "action": "Initialized LEARNOVA Workspace", "type": "system"}
         ]
+        self.active_doc_id: str = "doc_networks_osi_101"
+        self.active_doc_title: str = "Computer Networks: Principles & Architecture"
+
+    def set_active_document(self, doc_id: str, doc_title: str, concepts: Optional[List[Dict[str, Any]]] = None):
+        self.active_doc_id = doc_id
+        self.active_doc_title = doc_title
+        if doc_id != "doc_networks_osi_101" and concepts:
+            # Re-key concept mastery for the active document's concepts
+            new_mastery = {}
+            for c in concepts:
+                cid = c.get("id") or f"c_{c.get('name', '').lower().replace(' ', '_')}"
+                new_mastery[cid] = self.concept_mastery.get(cid, 0.25)
+            self.concept_mastery = new_mastery
+        elif doc_id != "doc_networks_osi_101" and not concepts:
+            self.concept_mastery = {}
 
     def update_profile(self, name: str, education_level: str, learning_level: str, preferred_style: str, language: str = "en"):
         self.profile.update({
@@ -114,7 +129,7 @@ class LearnerState:
             "timestamp": datetime.now().isoformat()
         })
         delta = 0.15 if is_correct else -0.05
-        matched_id = next((k for k in self.concept_mastery if concept.lower() in k.lower()), "c_transport_layer")
+        matched_id = next((k for k in self.concept_mastery if concept.lower() in k.lower()), f"c_{concept.lower().replace(' ', '_')}" if concept else "c_general")
         self.record_concept_interaction(
             matched_id,
             delta=delta,
@@ -123,7 +138,7 @@ class LearnerState:
 
     def record_teachback(self, eval_result: Dict[str, Any]):
         self.teachback_sessions.append(eval_result)
-        concept_id = eval_result.get("concept_id", "c_transport_layer")
+        concept_id = eval_result.get("concept_id") or f"c_{eval_result.get('concept_name', 'general').lower().replace(' ', '_')}"
         understanding = eval_result.get("understanding_score", 50)
         new_mastery = round(understanding / 100.0, 2)
         self.concept_mastery[concept_id] = new_mastery
@@ -211,9 +226,10 @@ class LearnerState:
                 "priority": "Medium"
             })
             
+        doc_topic = self.active_doc_title or "active study material"
         plan.append({
             "timeframe": "In 3 Days",
-            "task": "Complete Full Module Review on Transport Layer protocols",
+            "task": f"Complete Full Module Review on {doc_topic}",
             "priority": "Normal"
         })
         return plan

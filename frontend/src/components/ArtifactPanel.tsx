@@ -10,7 +10,7 @@ import {
   Minimize2,
   BookmarkCheck,
   HelpCircle,
-  Sparkles,
+  Lightbulb,
   ArrowRight,
   FileText,
   Copy,
@@ -66,8 +66,13 @@ export const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
             <div className="mt-3 p-3 bg-white rounded-xl border border-slate-200 text-slate-700 italic leading-relaxed">
               "{activeCitation.excerpt}"
             </div>
-            <div className="mt-3 text-[11px] text-slate-500">
-              💡 <em>Professor Nova strictly cites this passage to verify factual accuracy and prevent hallucinations.</em>
+            <div className="mt-3 flex items-center space-x-2 text-[11px] text-slate-500">
+              <img
+                src="/professor_nova.png"
+                alt="Professor Nova"
+                className="w-4 h-4 rounded-full object-cover border border-slate-200 shrink-0"
+              />
+              <em>Professor Nova strictly cites this passage to verify factual accuracy and prevent hallucinations.</em>
             </div>
           </div>
         </div>
@@ -293,7 +298,7 @@ export const ArtifactPanel: React.FC<ArtifactPanelProps> = ({
               onClick={() => onAskAboutArtifact(`Can you explain why the distinction in ${artifact.title} matters?`)}
               className="flex-1 py-1.5 px-2.5 bg-white hover:bg-blue-50 hover:text-blue-700 border border-slate-200 rounded-xl font-medium text-slate-700 flex items-center justify-center gap-1 transition-colors"
             >
-              <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+              <Lightbulb className="w-3.5 h-3.5 text-blue-600" />
               <span>Explain this artifact</span>
             </button>
           )}

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <!-- LEARNOVA Abstract 'L' Knowledge Orbit Mark -->
+  <defs>
+    <linearGradient id="learnova-grad" x1="24" y1="24" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2563EB" />
+      <stop offset="100%" stop-color="#1D4ED8" />
+    </linearGradient>
+    <linearGradient id="learnova-accent" x1="60" y1="36" x2="104" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#2563EB" />
+    </linearGradient>
+  </defs>
+
+  <!-- Foundation Stem (Information Column) -->
+  <rect x="28" y="22" width="16" height="58" rx="8" fill="url(#learnova-grad)" />
+
+  <!-- Dynamic Learning Orbit Arc (Ascending Understanding) -->
+  <path
+    d="M 36 72 C 36 92 48 102 70 102 C 90 102 104 88 104 68 C 104 50 90 38 72 38"
+    stroke="url(#learnova-grad)"
+    stroke-width="16"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Insight Focal Node (Nova Nucleus) -->
+  <circle cx="72" cy="38" r="9" fill="#0EA5E9" />
+  <circle cx="72" cy="38" r="4.5" fill="#FFFFFF" />
+</svg>

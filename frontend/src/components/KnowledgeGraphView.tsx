@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ConceptNode, RelationshipEdge } from '../types';
-import { Network, Sparkles, BookOpen, HelpCircle, CheckCircle2, Bookmark, ArrowRight, Check } from 'lucide-react';
+import { Network, BookOpen, HelpCircle, CheckCircle2, Bookmark, ArrowRight, Check } from 'lucide-react';
 
 interface KnowledgeGraphViewProps {
   concepts: ConceptNode[];
@@ -268,7 +268,7 @@ export const KnowledgeGraphView: React.FC<KnowledgeGraphViewProps> = ({
               onClick={() => onTeachConcept && onTeachConcept(selectedConcept)}
               className="w-full py-2.5 px-3 rounded-xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+              <BookOpen className="w-3.5 h-3.5 text-cyan-300" />
               <span>Teach Me This Concept</span>
             </button>
             <button

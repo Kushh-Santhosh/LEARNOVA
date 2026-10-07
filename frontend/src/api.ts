@@ -6,7 +6,14 @@ import {
   QuizEvaluation,
   TeachBackEvaluation,
   LearnerAnalytics,
-  LearnerProfile
+  LearnerProfile,
+  ScreenCapabilities,
+  ScreenContextMode,
+  ScreenGuidanceResponse,
+  ScreenVerifyResponse,
+  AvatarTurn,
+  BenchmarkReport,
+  EvaluationPayload
 } from './types';
 
 const API_BASE = '/api';
@@ -127,5 +134,107 @@ export const api = {
   async searchWorkspace(query: string) {
     const res = await fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`);
     return res.json();
-  }
+  },
+
+  async getScreenCapabilities(): Promise<ScreenCapabilities> {
+    const res = await fetch(`${API_BASE}/screen/capabilities`);
+    return res.json();
+  },
+
+  async analyzeScreen(payload: {
+    goal: string;
+    mode?: ScreenContextMode;
+    current_route?: string;
+    dom_elements?: any[];
+    screenshot_base64?: string;
+    step_index?: number;
+    active_document_id?: string | null;
+  }): Promise<ScreenGuidanceResponse> {
+    const res = await fetch(`${API_BASE}/screen/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
+  async verifyScreenStep(payload: {
+    workflow: string;
+    step_number: number;
+    current_route: string;
+    user_action?: string;
+    dom_evidence?: any;
+  }): Promise<ScreenVerifyResponse> {
+    const res = await fetch(`${API_BASE}/screen/verify-step`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
+  async getLearningPath(payload: {
+    goal: string;
+    learner_level?: string;
+    time_available?: string;
+    preferred_language?: string;
+    learning_style?: string;
+  }) {
+    const res = await fetch(`${API_BASE}/learn/path`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Learning path request failed');
+    return res.json();
+  },
+
+  async getResearchResources(payload: { goal: string; max_resources?: number }) {
+    const res = await fetch(`${API_BASE}/learn/research`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Research request failed');
+    return res.json();
+  },
+
+  async speakAvatar(payload: {
+    text: string;
+    emotion?: string;
+    mode?: string;
+    speech_rate_wpm?: number;
+    language?: string;
+  }): Promise<AvatarTurn> {
+    const res = await fetch(`${API_BASE}/avatar/speak`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Avatar speak error');
+    return res.json();
+  },
+
+  async getAvatarBenchmark(mode?: string): Promise<BenchmarkReport> {
+    const res = await fetch(`${API_BASE}/avatar/benchmark${mode ? `?mode=${mode}` : ''}`);
+    if (!res.ok) throw new Error('Avatar benchmark failed');
+    return res.json();
+  },
+
+  async evaluateResponse(payload: {
+    query: string;
+    response: string;
+    context?: string;
+    learner_level?: string;
+    iterations?: number;
+  }): Promise<EvaluationPayload> {
+    const res = await fetch(`${API_BASE}/avatar/evaluate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Response evaluation failed');
+    return res.json();
+  },
 };
+

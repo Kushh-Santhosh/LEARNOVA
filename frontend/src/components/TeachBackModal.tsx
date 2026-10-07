@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { TeachBackEvaluation } from '../types';
-import { Mic, MicOff, Send, Award, CheckCircle2, AlertTriangle, ArrowRight, Sparkles } from 'lucide-react';
+import { Mic, MicOff, Send, Award, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 interface TeachBackModalProps {
@@ -104,8 +104,12 @@ export const TeachBackModal: React.FC<TeachBackModalProps> = ({
 
         {/* Prompt */}
         <div className="bg-purple-50/70 border border-purple-100 rounded-2xl p-4 mb-4 text-xs text-purple-900">
-          <p className="font-semibold flex items-center gap-1.5 mb-1">
-            <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+          <p className="font-semibold flex items-center gap-2 mb-1">
+            <img
+              src="/professor_nova.png"
+              alt="Professor Nova"
+              className="w-4 h-4 rounded-full object-cover border border-purple-200"
+            />
             Professor Nova's Challenge:
           </p>
           <p className="leading-relaxed text-slate-700">
@@ -233,7 +237,7 @@ export const TeachBackModal: React.FC<TeachBackModalProps> = ({
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
                 <span className="font-bold text-slate-700 flex items-center gap-1 mb-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-slate-500" />
+                  <AlertTriangle className="w-3.5 h-3.5 text-slate-500" />
                   Key Elements To Add:
                 </span>
                 {evaluation.missing_concepts.length > 0 ? (
@@ -265,9 +269,16 @@ export const TeachBackModal: React.FC<TeachBackModalProps> = ({
 
             {/* Recommendation */}
             <div className="p-4 bg-white rounded-2xl border border-slate-200 text-xs">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block mb-1">
-                Professor Nova's Pedagogical Feedback:
-              </span>
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <img
+                  src="/professor_nova.png"
+                  alt="Professor Nova"
+                  className="w-3.5 h-3.5 rounded-full object-cover border border-slate-200"
+                />
+                <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                  Professor Nova's Pedagogical Feedback:
+                </span>
+              </div>
               <p className="text-slate-800 leading-relaxed font-medium">
                 {evaluation.recommendation}
               </p>

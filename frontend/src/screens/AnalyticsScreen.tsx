@@ -10,7 +10,6 @@ import {
   ShieldCheck,
   TrendingUp,
   RotateCcw,
-  Sparkles,
   BookOpen
 } from 'lucide-react';
 

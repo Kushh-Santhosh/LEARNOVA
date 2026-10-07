@@ -7,7 +7,7 @@ import {
   HelpCircle,
   Award,
   Layers,
-  Sparkles,
+  Compass,
   BookOpen,
   ChevronDown,
   Globe
@@ -49,7 +49,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     { id: 'teach_back', label: 'Teach-Back Challenge', icon: Award, prompt: 'Challenge me to teach this concept back to you.' },
     { id: 'visual', label: 'Generate Visual Diagram', icon: Layers, prompt: 'Create a visual diagram or flowchart comparing the key mechanisms.' },
     { id: 'simplify', label: 'Explain Simply (No Jargon)', icon: BookOpen, prompt: 'Explain this in the simplest possible terms with a real-life analogy.' },
-    { id: 'socratic', label: 'Socratic Guidance', icon: Sparkles, prompt: 'Ask me a guiding Socratic question instead of telling me the answer.' },
+    { id: 'socratic', label: 'Socratic Guidance', icon: Compass, prompt: 'Ask me a guiding Socratic question instead of telling me the answer.' },
   ];
 
   const languages = [

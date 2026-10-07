@@ -6,6 +6,9 @@ export interface DocumentMeta {
   sections?: Array<{ id: string; title: string; page: number }>;
   chunk_count: number;
   concept_count: number;
+  page_count?: number;
+  language?: string;
+  is_demo?: boolean;
 }
 
 export interface ConceptNode {
@@ -85,7 +88,153 @@ export interface TeacherResponse {
   citations: Citation[];
   follow_up_prompt?: string;
   language?: string;
+  avatar_turn?: AvatarTurn;
 }
+
+export type RhubarbVisemeShape = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'X';
+
+export interface VisemeEvent {
+  at_ms: number;
+  duration_ms: number;
+  shape: RhubarbVisemeShape;
+  intensity?: number;
+}
+
+export type AvatarExpression =
+  | 'idle'
+  | 'listening'
+  | 'thinking'
+  | 'explaining'
+  | 'encouraging'
+  | 'celebrating'
+  | 'remediating'
+  | 'questioning';
+
+export interface ExpressionEvent {
+  at_ms: number;
+  duration_ms: number;
+  expression: AvatarExpression;
+  intensity?: number;
+}
+
+export interface AvatarCostEstimate {
+  active_speaking_minutes: number;
+  tts_cost_inr: number;
+  render_cost_inr: number;
+  llm_cost_inr: number;
+  total_turn_cost_inr: number;
+  cost_per_minute_inr: number;
+  target_met: boolean;
+  target_cap_inr: number;
+  mode: string;
+}
+
+export interface AvatarTurn {
+  text: string;
+  audio?: string | null;
+  duration_ms: number;
+  viseme_timeline: VisemeEvent[];
+  expression_timeline: ExpressionEvent[];
+  start_latency_ms: number;
+  time_to_audio_ms: number;
+  time_to_first_avatar_frame_ms: number;
+  total_processing_ms: number;
+  render_mode: 'mode_a_local' | 'mode_b_hq' | 'mode_c_text' | string;
+  provider: string;
+  cost_estimate: AvatarCostEstimate;
+}
+
+export interface BenchmarkCaseResult {
+  case_id: string;
+  category: string;
+  type: string;
+  word_count: number;
+  duration_ms: number;
+  time_to_audio_ms: number;
+  time_to_first_avatar_frame_ms: number;
+  total_processing_ms: number;
+  viseme_event_count: number;
+  expression_event_count: number;
+  lip_sync_score: number;
+  expression_score: number;
+  responsiveness: string;
+  cost_per_minute_inr: number;
+  target_met: boolean;
+  error?: string;
+}
+
+export interface BenchmarkReport {
+  total_cases: number;
+  successful_cases: number;
+  failure_count: number;
+  metrics: {
+    cost_per_minute_inr: number;
+    target_cap_inr: number;
+    target_achieved: boolean;
+    time_to_audio_ms: number;
+    time_to_first_avatar_frame_ms: number;
+    total_processing_ms: number;
+    lip_sync_score: number;
+    expression_score: number;
+    responsiveness: string;
+    consistency: string;
+  };
+  comparison: {
+    baseline: {
+      name: string;
+      rendering_location: string;
+      cost_per_minute_inr: number;
+      time_to_first_frame_ms: number;
+      lip_sync_method: string;
+      lip_sync_score: number;
+      server_gpu_dependency: boolean;
+      scalability_barrier: string;
+      target_met: boolean;
+    };
+    optimized: {
+      name: string;
+      rendering_location: string;
+      cost_per_minute_inr: number;
+      time_to_first_frame_ms: number;
+      lip_sync_method: string;
+      lip_sync_score: number;
+      server_gpu_dependency: boolean;
+      scalability_barrier: string;
+      target_met: boolean;
+    };
+    cost_reduction_percent: number;
+    latency_reduction_percent: number;
+  };
+  cases: BenchmarkCaseResult[];
+}
+
+export interface EvaluationDimensionResult {
+  dimension: string;
+  score: number;
+  reason: string;
+  evidence: string;
+  confidence: number;
+}
+
+export interface EvaluationPayload {
+  evaluation: {
+    overall_score: number;
+    dimension_scores: Record<string, number>;
+    detailed_dimensions: Record<string, EvaluationDimensionResult>;
+    grade: string;
+  };
+  consistency: {
+    iterations_run: number;
+    mean: number;
+    median: number;
+    standard_deviation: number;
+    range: [number, number];
+    stability_grade: string;
+    dimension_consistency: Record<string, { mean: number; std_dev: number }>;
+    run_scores: number[];
+  };
+}
+
 
 export interface QuizItem {
   id: string;
@@ -148,3 +297,90 @@ export interface LearnerAnalytics {
   revision_plan: Array<{ timeframe: string; task: string; priority: string }>;
   recent_evidence?: Array<{ timestamp: string; concept: string; delta: any; reason: string; type: string }>;
 }
+
+export type ScreenContextMode = 'dom' | 'browser_screen' | 'desktop';
+
+export type GuideStateMachineState =
+  | 'IDLE'
+  | 'LISTENING'
+  | 'CAPTURING'
+  | 'ANALYZING'
+  | 'PLANNING'
+  | 'POINTING'
+  | 'WAITING_FOR_USER'
+  | 'VERIFYING'
+  | 'NEXT_STEP'
+  | 'COMPLETED'
+  | 'PAUSED'
+  | 'ERROR';
+
+export interface ScreenTargetElement {
+  id: string;
+  guide_id?: string;
+  label: string;
+  type: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  confidence: number;
+}
+
+export interface ScreenRecommendedAction {
+  action: 'click' | 'look' | 'input';
+  instruction: string;
+  what: string;
+  why: string;
+  next: string;
+}
+
+export interface ScreenGuidanceResponse {
+  status: string;
+  mode: ScreenContextMode;
+  workflow: string;
+  step_number: number;
+  total_steps: number;
+  is_last_step: boolean;
+  application: string;
+  screen_description: string;
+  target_element: ScreenTargetElement;
+  recommended_action: ScreenRecommendedAction;
+  spoken_text: string;
+  course_connection: {
+    active_document_id: string | null;
+    has_connection: boolean;
+    explanation: string | null;
+  };
+  vision_fallback_active?: boolean;
+}
+
+export interface ScreenVerifyResponse {
+  status: 'STEP_COMPLETED' | 'COMPLETED' | 'NEEDS_CONFIRMATION' | 'ERROR';
+  verified: boolean;
+  current_step?: number;
+  next_step?: number | null;
+  message: string;
+}
+
+export interface ScreenCapabilities {
+  status: string;
+  supported_modes: Array<{
+    id: ScreenContextMode;
+    name: string;
+    status: string;
+    is_default?: boolean;
+    requires_permission?: boolean;
+    requires_native_companion?: boolean;
+  }>;
+  privacy: {
+    transient_in_memory_only: boolean;
+    zero_disk_logging: boolean;
+    permission_gated: boolean;
+  };
+  vision_provider: {
+    type: string;
+    is_configured: boolean;
+    cost_tier: string;
+  };
+}
+

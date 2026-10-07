@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  Sparkles,
   Plus,
   Home,
   BookOpen,
@@ -10,8 +9,11 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Activity,
+  BarChart2,
   X
 } from 'lucide-react';
+import { LearnovaLogo } from './LearnovaLogo';
 import { LearnerProfile } from '../types';
 
 interface SidebarProps {
@@ -21,9 +23,12 @@ interface SidebarProps {
   setCollapsed: (collapsed: boolean) => void;
   profile: LearnerProfile;
   onOpenProfile: () => void;
+  onOpenDiagnostics?: () => void;
+  onOpenBenchmark?: () => void;
   activeCourseName: string;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  onNewLesson?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -33,9 +38,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   setCollapsed,
   profile,
   onOpenProfile,
+  onOpenDiagnostics,
+  onOpenBenchmark,
   activeCourseName,
   isMobileOpen = false,
   onCloseMobile,
+  onNewLesson,
+
 }) => {
   // Calm, minimal navigation items matching required information architecture
   const navItems = [
@@ -73,30 +82,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       >
         <div>
           {/* Brand Header */}
-          <div className="h-14 flex items-center justify-between px-4 border-b border-slate-100">
+          <div className="h-14 flex items-center justify-between px-3.5 border-b border-slate-100">
             {!collapsed ? (
               <div
                 onClick={() => handleNavClick('home')}
-                className="flex items-center space-x-2.5 cursor-pointer group"
+                className="cursor-pointer group flex items-center transition-opacity hover:opacity-90"
               >
-                <div className="w-7 h-7 rounded-xl bg-slate-950 text-white flex items-center justify-center font-bold text-xs group-hover:bg-blue-600 transition-colors">
-                  <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
-                </div>
-                <div className="flex flex-col">
-                  <span className="font-semibold text-xs tracking-tight text-slate-900">
-                    LEARNOVA
-                  </span>
-                  <span className="text-[9px] text-slate-400 font-normal">
-                    AI Classroom
-                  </span>
-                </div>
+                <LearnovaLogo variant="lockup" size="sm" showTagline={false} />
               </div>
             ) : (
               <div
                 onClick={() => handleNavClick('home')}
-                className="w-7 h-7 rounded-xl bg-slate-950 text-white flex items-center justify-center mx-auto cursor-pointer"
+                className="mx-auto cursor-pointer group flex items-center justify-center transition-transform hover:scale-105"
               >
-                <Sparkles className="w-3.5 h-3.5 text-cyan-300" />
+                <LearnovaLogo variant="mark" size="sm" />
               </div>
             )}
 
@@ -121,7 +120,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* New Lesson Button */}
           <div className="p-3">
             <button
-              onClick={() => handleNavClick('classroom')}
+              onClick={() => { if (onNewLesson) onNewLesson(); else handleNavClick('classroom'); }}
+              data-guide-id="nav-new-lesson"
               className={`w-full py-2 px-3 rounded-xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer ${
                 collapsed ? 'px-0' : ''
               }`}
@@ -137,10 +137,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
+              const guideId = item.id === 'knowledge_graph' ? 'nav-knowledge' : `nav-${item.id}`;
               return (
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id)}
+                  data-guide-id={guideId}
                   className={`w-full flex items-center space-x-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
                     isActive
                       ? 'bg-slate-100 text-slate-950 font-semibold'
@@ -179,7 +181,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div className="flex-1 min-w-0">
                 <div className="text-xs font-medium text-slate-900 truncate flex items-center justify-between">
                   <span>{profile.name}</span>
-                  <Settings className="w-3 h-3 text-slate-400" />
+                  <div className="flex items-center space-x-1">
+                    {onOpenBenchmark && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenBenchmark();
+                        }}
+                        className="p-1 text-slate-400 hover:text-teal-600 rounded transition-colors"
+                        title="Avatar Quality & Cost Benchmark Dashboard"
+                      >
+                        <BarChart2 className="w-3 h-3 text-teal-600" />
+                      </span>
+                    )}
+                    {onOpenDiagnostics && (
+                      <span
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenDiagnostics();
+                        }}
+                        className="p-1 text-slate-400 hover:text-blue-600 rounded transition-colors"
+                        title="Developer Diagnostics & Zero-Dollar Cost Guard"
+                      >
+                        <Activity className="w-3 h-3" />
+                      </span>
+                    )}
+                    <Settings className="w-3 h-3 text-slate-400" />
+                  </div>
+
                 </div>
                 <div className="text-[10px] text-slate-400 truncate">
                   {profile.learning_level} • {profile.language?.toUpperCase() || 'EN'}

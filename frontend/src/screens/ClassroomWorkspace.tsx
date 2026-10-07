@@ -11,11 +11,13 @@ import {
   TeachBackEvaluation,
 } from '../types';
 import { ProfessorNova } from '../components/avatar/ProfessorNova';
-import { AvatarState } from '../components/avatar/AvatarTypes';
+import { AvatarState } from '../components/avatar/ProfessorNova';
 import { ArtifactPanel } from '../components/ArtifactPanel';
 import { ChatComposer } from '../components/ChatComposer';
 import { QuizModal } from '../components/QuizModal';
 import { TeachBackModal } from '../components/TeachBackModal';
+import { VoiceSettingsModal } from '../components/voice/VoiceSettingsModal';
+import { voiceSynthesis } from '../services/voiceSynthesis';
 import { api } from '../api';
 import {
   AlertTriangle,
@@ -24,12 +26,15 @@ import {
   HelpCircle,
   Award,
   Layers,
-  Sparkles,
+  User,
+  Sliders,
   Maximize2,
   ChevronRight,
   Menu,
   X
 } from 'lucide-react';
+
+import { AvatarTurn } from '../types';
 
 interface ClassroomWorkspaceProps {
   activeDoc: DocumentMeta | null;
@@ -39,6 +44,7 @@ interface ClassroomWorkspaceProps {
   activeLanguage: string;
   onChangeLanguage: (lang: string) => void;
   onOpenMobileNav?: () => void;
+  onOpenBenchmark?: () => void;
 }
 
 interface ChatMessage {
@@ -61,6 +67,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
   activeLanguage,
   onChangeLanguage,
   onOpenMobileNav,
+  onOpenBenchmark,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -70,6 +77,9 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
   const [avatarState, setAvatarState] = useState<AvatarState>('idle');
   const [isFocusTeacher, setIsFocusTeacher] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [activeAvatarTurn, setActiveAvatarTurn] = useState<AvatarTurn | null>(null);
+  const [avatarMode, setAvatarMode] = useState<'mode_a_local' | 'mode_b_hq' | 'mode_c_text'>('mode_a_local');
+
 
   // Contextual Artifact / Source state
   const [activeArtifact, setActiveArtifact] = useState<LearningArtifact | null>(null);
@@ -78,6 +88,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
   // Modals state
   const [activeQuiz, setActiveQuiz] = useState<QuizItem | null>(null);
   const [isTeachBackOpen, setIsTeachBackOpen] = useState(false);
+  const [isVoiceSettingsOpen, setIsVoiceSettingsOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -85,18 +96,45 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isSending]);
 
-  // Initial welcome message
+  // Track active document ID to reset or initialize course messages dynamically
+  const activeDocIdRef = useRef<string | null>(null);
+
   useEffect(() => {
-    if (messages.length === 0) {
-      const initialText =
-        "Welcome. I'm Professor Nova, your adaptive AI teacher for Computer Networks.\n\n" +
-        "We'll explore Layer 4: The Transport Layer together—comparing TCP and UDP, examining connection reliability, and breaking down real-world tradeoffs.\n\n" +
-        "Before we dive in: in your own words, what role does the Transport Layer play when two applications communicate across the Internet?";
-      const initialSpoken = "Welcome. I am Professor Nova. Before we dive into TCP and UDP, what do you already know about the Transport Layer?";
+    if (activeDocIdRef.current !== (activeDoc?.id ?? 'none')) {
+      activeDocIdRef.current = activeDoc?.id ?? 'none';
+
+      let initialText = '';
+      let initialSpoken = '';
+
+      if (!activeDoc) {
+        // General learning mode — no document required
+        initialText =
+          "Hi! I'm **Professor Nova**, your adaptive AI teacher.\n\n" +
+          "You haven't uploaded a document yet — that's perfectly fine! You can:\n" +
+          "• Type any topic: **\"I want to learn Python\"**, **\"Teach me C++\"**, **\"Explain machine learning\"**\n" +
+          "• Ask for a **learning roadmap** for any subject\n" +
+          "• **Upload a document** from the Documents tab and I'll teach it to you\n\n" +
+          "What would you like to learn today?";
+        initialSpoken = "Hi, I'm Professor Nova. What would you like to learn today? Just tell me the subject.";
+      } else if ((activeDoc as any).is_demo) {
+        const targetTopic = activeConcept?.name || (concepts.length > 0 ? concepts[0].name : activeDoc.title);
+        initialText =
+          `Welcome to the **${activeDoc.title}**.\n\n` +
+          `I'm Professor Nova, your adaptive AI teacher. Today we'll focus on **${targetTopic}**, grounded in the demo curriculum.\n\n` +
+          `Before we dive in: what do you already know about **${targetTopic}**?`;
+        initialSpoken = `Welcome. I'm Professor Nova. Before we dive in, what do you already know about ${targetTopic}?`;
+      } else {
+        const targetTopic = activeConcept?.name || (concepts.length > 0 ? concepts[0].name : activeDoc.title);
+        initialText =
+          `Welcome. I'm Professor Nova, your adaptive AI teacher for **${activeDoc.title}**.\n\n` +
+          `I have structured your uploaded material into our active curriculum. Today we will focus on **${targetTopic}**, grounded strictly in your document.\n\n` +
+          `To begin: in your own words, what is your current understanding of **${targetTopic}**?`;
+        initialSpoken = `Welcome. I'm Professor Nova, your teacher for ${activeDoc.title}. What do you already know about ${targetTopic}?`;
+      }
 
       setMessages([
         {
-          id: 'msg_welcome',
+          id: `msg_welcome_${activeDoc?.id ?? 'general'}`,
           sender: 'teacher',
           text: initialText,
           spoken_text: initialSpoken,
@@ -106,44 +144,31 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
       setSpokenText(initialSpoken);
       playSpeech(initialSpoken);
     }
-  }, []);
+  }, [activeDoc?.id, activeConcept?.name, concepts]);
 
-  // Web Speech API Voice Engine with natural fallback
+  // Professor Nova Voice Engine with dynamic deep male heuristics & subtle robotic calibration
   const playSpeech = (text: string) => {
-    if (!text || isMuted || typeof window === 'undefined' || !window.speechSynthesis) return;
+    if (!text || isMuted) return;
 
-    window.speechSynthesis.cancel();
-    const clean = text.replace(/[*#_`>]/g, '').trim();
-    const utterance = new SpeechSynthesisUtterance(clean);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(
-      (v) => (v.name.includes('Samantha') || v.name.includes('Google') || v.name.includes('Natural')) && v.lang.startsWith('en')
-    );
-    if (preferred) utterance.voice = preferred;
-
-    utterance.onstart = () => {
-      setIsSpeaking(true);
-      setAvatarState('speaking');
-    };
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      setAvatarState('idle');
-    };
-    utterance.onerror = () => {
-      setIsSpeaking(false);
-      setAvatarState('idle');
-    };
-
-    window.speechSynthesis.speak(utterance);
+    voiceSynthesis.speak(text, {
+      lang: activeLanguage,
+      onStart: () => {
+        setIsSpeaking(true);
+        setAvatarState('speaking');
+      },
+      onEnd: () => {
+        setIsSpeaking(false);
+        setAvatarState('idle');
+      },
+      onError: () => {
+        setIsSpeaking(false);
+        setAvatarState('idle');
+      },
+    });
   };
 
   const handleInterrupt = () => {
-    if (window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
+    voiceSynthesis.stop();
     setIsSpeaking(false);
     setAvatarState('interrupted');
     setTimeout(() => setAvatarState('idle'), 800);
@@ -214,9 +239,11 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
 
     try {
       const res: TeacherResponse = await api.teach({
-        document_id: activeDoc?.id || 'doc_networks_osi_101',
+        // Use 'general_learning' when no document is loaded so the backend
+        // knows to answer from general knowledge, not a specific doc.
+        document_id: activeDoc?.id || 'general_learning',
         message: text,
-        active_concept: activeConcept?.name || 'Transport Layer (L4)',
+        active_concept: activeConcept?.name || (concepts.length > 0 ? concepts[0].name : activeDoc?.title) || '',
         mode: mode || 'explain',
         language: lang || activeLanguage,
       });
@@ -238,6 +265,10 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
       // Human-like concise spoken line (not reciting the whole essay)
       const spoken = res.spoken_text || res.teacher_text.split('\n')[0].replace(/[*#]/g, '');
 
+      if (res.avatar_turn) {
+        setActiveAvatarTurn(res.avatar_turn);
+      }
+
       const teacherMsg: ChatMessage = {
         id: `msg_${Date.now()}_teacher`,
         sender: 'teacher',
@@ -252,7 +283,13 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
 
       setMessages((prev) => [...prev, teacherMsg]);
       setSpokenText(spoken);
-      playSpeech(spoken);
+
+      if (avatarMode === 'mode_c_text') {
+        setAvatarState('idle');
+      } else {
+        playSpeech(spoken);
+      }
+
     } catch (err) {
       console.error(err);
       setAvatarState('error');
@@ -262,10 +299,11 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
   };
 
   const openQuizForConcept = async (conceptName?: string) => {
+    if (!activeDoc) return;
     try {
       const quiz = await api.generateQuiz(
-        activeDoc?.id || 'doc_networks_osi_101',
-        conceptName || activeConcept?.name || 'Transport Layer'
+        activeDoc.id,
+        conceptName || activeConcept?.name || (concepts.length > 0 ? concepts[0].name : 'Core Concept')
       );
       setActiveQuiz(quiz);
     } catch (err) {
@@ -305,6 +343,11 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
         />
       )}
 
+      <VoiceSettingsModal
+        isOpen={isVoiceSettingsOpen}
+        onClose={() => setIsVoiceSettingsOpen(false)}
+      />
+
       {/* Top Header: Calm breadcrumb & context */}
       <header className="h-14 px-4 sm:px-8 border-b border-slate-200/80 bg-white/80 backdrop-blur-xs flex items-center justify-between shrink-0 select-none z-10">
         <div className="flex items-center space-x-2 text-xs text-slate-500 min-w-0">
@@ -320,11 +363,11 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
           <span className="hidden sm:inline hover:text-slate-800 transition-colors">Courses</span>
           <ChevronRight className="hidden sm:inline w-3 h-3 text-slate-300" />
           <span className="font-medium text-slate-800 truncate">
-            {activeDoc?.title || 'Computer Networks'}
+            {activeDoc?.title || 'Active Course'}
           </span>
           <ChevronRight className="w-3 h-3 text-slate-300 shrink-0" />
           <span className="text-slate-900 font-semibold truncate">
-            {activeConcept?.name || 'Transport Layer'}
+            {activeConcept?.name || (concepts.length > 0 ? concepts[0].name : 'Course Overview')}
           </span>
         </div>
 
@@ -332,6 +375,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
         <div className="flex items-center space-x-2 text-xs">
           <button
             onClick={() => openQuizForConcept()}
+            data-guide-id="btn-classroom-quiz"
             className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-slate-950 font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Test understanding with a diagnostic quiz"
           >
@@ -340,11 +384,21 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
           </button>
           <button
             onClick={() => setIsTeachBackOpen(true)}
+            data-guide-id="btn-classroom-teachback"
             className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 text-slate-700 hover:text-slate-950 font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Explain the concept back in your own words"
           >
             <Award className="w-3.5 h-3.5 text-slate-500" />
             <span className="hidden sm:inline">Teach-Back</span>
+          </button>
+          <button
+            onClick={() => setIsVoiceSettingsOpen(true)}
+            data-guide-id="btn-classroom-voice"
+            className="px-3 py-1.5 rounded-xl border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer bg-white"
+            title="Configure Professor Nova Voice Persona & Subtle Robotic Style"
+          >
+            <Sliders className="w-3.5 h-3.5 text-blue-600" />
+            <span className="hidden md:inline">Voice</span>
           </button>
           <button
             onClick={() => setIsFocusTeacher(!isFocusTeacher)}
@@ -355,7 +409,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
             }`}
             title="Toggle Live Teacher Focus Mode"
           >
-            <Sparkles className="w-3.5 h-3.5" />
+            <User className="w-3.5 h-3.5" />
             <span className="hidden md:inline">Focus Teacher</span>
           </button>
         </div>
@@ -409,9 +463,11 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
                   /* Professor Nova Message: Calm, minimal, conversation-first */
                   <div className="w-full flex items-start space-x-3.5">
                     {/* Small Nova Identity indicator */}
-                    <div className="w-7 h-7 rounded-xl bg-slate-950 text-cyan-300 flex items-center justify-center shrink-0 mt-0.5 shadow-2xs">
-                      <Sparkles className="w-3.5 h-3.5" />
-                    </div>
+                    <img
+                      src="/professor_nova.png"
+                      alt="Professor Nova"
+                      className="w-8 h-8 rounded-full object-cover shrink-0 mt-0.5 border border-slate-200/80 shadow-2xs ring-1 ring-slate-100"
+                    />
 
                     <div className="flex-1 min-w-0">
                       {/* Name & Spoken audio pill */}
@@ -476,8 +532,13 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
 
             {/* Subtle Thinking Activity Indicator */}
             {isSending && (
-              <div className="flex items-center space-x-2.5 text-xs text-slate-400 py-2">
-                <span className="w-2 h-2 rounded-full bg-slate-400 animate-ping" />
+              <div className="flex items-center space-x-2.5 text-xs text-slate-500 py-2">
+                <img
+                  src="/professor_nova.png"
+                  alt="Professor Nova"
+                  className="w-4 h-4 rounded-full object-cover animate-pulse border border-slate-200"
+                />
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-ping" />
                 <span>Professor Nova is reasoning...</span>
               </div>
             )}
@@ -485,14 +546,16 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
           </div>
 
           {/* Bottom Chat Composer */}
-          <ChatComposer
-            onSendMessage={handleSendMessage}
-            isSending={isSending}
-            isListening={isListening}
-            onToggleListening={toggleListening}
-            activeLanguage={activeLanguage}
-            onChangeLanguage={onChangeLanguage}
-          />
+          <div data-guide-id="classroom-chat-composer" className="w-full">
+            <ChatComposer
+              onSendMessage={handleSendMessage}
+              isSending={isSending}
+              isListening={isListening}
+              onToggleListening={toggleListening}
+              activeLanguage={activeLanguage}
+              onChangeLanguage={onChangeLanguage}
+            />
+          </div>
         </div>
 
         {/* Contextual Right Workspace Panel */}
@@ -522,6 +585,9 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
               provider="auto"
               state={avatarState}
               spokenText={spokenText}
+              avatarTurn={activeAvatarTurn}
+              mode={avatarMode}
+              onModeChange={setAvatarMode}
               isMuted={isMuted}
               onToggleMute={() => setIsMuted(!isMuted)}
               onReplay={() => {
@@ -530,6 +596,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
               onInterrupt={handleInterrupt}
               isFocusMode={isFocusTeacher}
               onToggleFocusMode={() => setIsFocusTeacher(!isFocusTeacher)}
+              onOpenBenchmark={onOpenBenchmark}
             />
 
             {/* Quiet Lesson Guide */}
@@ -578,6 +645,9 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
               provider="auto"
               state={avatarState}
               spokenText={spokenText}
+              avatarTurn={activeAvatarTurn}
+              mode={avatarMode}
+              onModeChange={setAvatarMode}
               isMuted={isMuted}
               onToggleMute={() => setIsMuted(!isMuted)}
               onReplay={() => {
@@ -586,6 +656,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
               onInterrupt={handleInterrupt}
               isFocusMode={true}
               onToggleFocusMode={() => setIsFocusTeacher(false)}
+              onOpenBenchmark={onOpenBenchmark}
             />
           </div>
         </div>

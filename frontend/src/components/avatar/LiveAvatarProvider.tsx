@@ -1,6 +1,6 @@
 import React, { useRef, useEffect } from 'react';
 import { Volume2, VolumeX, RefreshCw, Maximize2, Minimize2, Video } from 'lucide-react';
-import { AvatarProviderProps } from './AvatarTypes';
+import { AvatarProviderProps } from './ProfessorNova';
 
 export const LiveAvatarProvider: React.FC<AvatarProviderProps & { streamUrl?: string }> = ({
   state,

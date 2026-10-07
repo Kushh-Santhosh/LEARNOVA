@@ -1,13 +1,39 @@
+# Environment secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Python cache & venv
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
-*.pyd
-.Python
+.venv/
+venv/
 backend/venv/
+.Python
 backend/uploads/*
 !backend/uploads/.gitkeep
+.pytest_cache/
+.mypy_cache/
+coverage/
+*.egg-info/
+
+# Node / frontend build
 node_modules/
 dist/
+build/
+.cache/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# System
 .DS_Store
+Thumbs.db
 *.log
-.env
+
+# Scratch / temporary artifacts
+scratch/
+artifacts/
+*.png.tmp
+

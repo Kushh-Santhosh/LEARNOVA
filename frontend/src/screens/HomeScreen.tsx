@@ -12,7 +12,6 @@ import {
   Network,
   Clock,
   CheckCircle2,
-  Sparkles,
   Layers,
   ChevronRight,
   HelpCircle
@@ -28,6 +27,7 @@ interface HomeScreenProps {
   onOpenCourse: (docId: string) => void;
   onOpenDocuments: () => void;
   onOpenProgress: () => void;
+  onStartGeneralLearning?: (goal: string) => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -40,6 +40,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onOpenCourse,
   onOpenDocuments,
   onOpenProgress,
+  onStartGeneralLearning,
 }) => {
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -85,7 +86,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 {activeCourse.title}
               </h2>
               <p className="text-xs sm:text-sm text-slate-500 mt-1 font-normal">
-                Currently studying: <span className="text-slate-800 font-medium">Layer 4: Transport Layer (TCP vs UDP)</span>
+                Currently studying: <span className="text-slate-800 font-medium">{weakConcept?.name || (concepts.length > 0 ? concepts[0].name : 'Core Curriculum Topics')}</span>
               </p>
             </div>
 
@@ -98,7 +99,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             </button>
           </div>
 
-          {/* Quiet Progress Bar */}
+        {/* Quiet Progress Bar */}
           <div className="mt-6 pt-5 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
             <div className="flex items-center gap-2">
               <span className="font-mono text-slate-700 font-semibold">
@@ -107,8 +108,62 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <span>course mastered</span>
             </div>
             <span className="text-[11px] text-slate-400">
-              Next concept: {weakConcept?.name || 'TCP Reliability'}
+              Next concept: {weakConcept?.name || 'Next topic'}
             </span>
+          </div>
+        </div>
+      )}
+
+      {/* General Learning Panel — shown when no document is loaded */}
+      {!activeCourse && (
+        <div className="mb-10 p-6 sm:p-7 rounded-3xl bg-white border border-slate-200/90 shadow-xs">
+          <div className="mb-4">
+            <span className="text-xs font-semibold text-blue-600 tracking-wide uppercase flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+              Professor Nova is ready
+            </span>
+            <h2 className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight mt-2">
+              What would you like to learn today?
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Type any subject below, or pick a quick start. No upload required.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 mb-5">
+            {[
+              'Learn Python',
+              'Learn C++',
+              'Learn Backend Development',
+              'Learn Machine Learning',
+              'Learn Web Development',
+              'Learn Computer Networks',
+            ].map((goal) => (
+              <button
+                key={goal}
+                onClick={() => { onStartGeneralLearning?.(goal); onContinueLesson(); }}
+                className="px-3.5 py-1.5 rounded-xl bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-slate-700 text-xs font-medium transition-colors cursor-pointer border border-transparent hover:border-blue-200"
+              >
+                {goal}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={onContinueLesson}
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-slate-950 hover:bg-slate-800 text-white text-xs font-medium transition-colors shadow-xs shrink-0 cursor-pointer"
+            >
+              <span>Open learning workspace</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={onOpenDocuments}
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl bg-white border border-slate-200 hover:border-slate-300 text-slate-700 text-xs font-medium transition-colors cursor-pointer"
+            >
+              <FolderClosed className="w-3.5 h-3.5" />
+              <span>Upload a document</span>
+            </button>
           </div>
         </div>
       )}
@@ -177,7 +232,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               <div>
                 <h4 className="text-xs font-semibold text-slate-900">Recommended Spaced Review</h4>
                 <p className="text-[11px] text-slate-500 mt-0.5 leading-relaxed">
-                  TCP reliability and connection handshake are scheduled for today based on your last quiz.
+                  {weakConcept
+                    ? `${weakConcept.name} is scheduled for review based on your recent activity.`
+                    : 'Start a lesson and Nova will schedule review sessions automatically.'}
                 </p>
               </div>
             </div>

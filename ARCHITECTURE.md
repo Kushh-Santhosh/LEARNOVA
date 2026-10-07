@@ -1,168 +1,83 @@
 # LEARNOVA Architecture Specification
 
-**Tagline:** Turn Information Into Understanding  
-**System:** Adaptive AI Classroom  
+**System:** LEARNOVA — Adaptive AI Classroom & Cost-Efficient Live Avatar Engine  
+**Core Mission:** Turn Information Into Understanding with Sub-₹10/min Live AI Avatar Teaching
 
 ---
 
-## 1. High-Level System Architecture
+## 1. System Architecture Overview
 
-LEARNOVA decouples **Knowledge Understanding**, **Adaptive Pedagogical Orchestration**, and **Visual/Voice Presentation**.
+LEARNOVA strictly separates the **AI Teacher Brain** from the **Reusable Avatar Engine**, **Presentation UI**, and **Screen Guidance Infrastructure**.
 
 ```
- +-------------------------------------------------------------------------+
- |                          LEARNOVA FRONTEND                              |
- |   +-------------------+  +-----------------------+  +---------------+   |
- |   | Interactive KG    |  | Dynamic Visual Screen |  | Avatar/Voice  |   |
- |   | Concept Inspector |  | Whiteboard / Quizzes  |  | Audio Visemes |   |
- |   +---------+---------+  +-----------+-----------+  +-------+-------+   |
- |             |                        |                      |           |
- +-------------+------------------------+----------------------+-----------+
-                                        | HTTP / SSE / REST
-                                        v
- +-------------------------------------------------------------------------+
- |                       FASTAPI TEACHING BACKEND                          |
- |                                                                         |
- |  +-------------------------------------------------------------------+  |
- |  |                        TEACHER BRAIN LAYER                        |  |
- |  |  Modes: Explain | Simplify | Analogy | Visual | Quiz | Remediate  |  |
- |  +-------------------+--------------------+---------------------+----+  |
- |                      |                    |                     |       |
- |                      v                    v                     v       |
- |  +-----------------------+  +-------------------+  +-----------------+  |
- |  | Document Intelligence |  | Misconception Eng |  | Teach-Back Eval |  |
- |  | PyMuPDF / Sectioning  |  | Root-cause & Fix  |  | Coverage/Gaps   |  |
- |  +-----------+-----------+  +---------+---------+  +--------+--------+  |
- |              |                        |                     |           |
- +--------------+------------------------+---------------------+-----------+
-                |                        |                     |
-                v                        v                     v
- +-------------------------------------------------------------------------+
- |                         STORAGE & EMBEDDINGS                            |
- |  - Primary: Supabase PostgreSQL + pgvector                              |
- |  - Local Fallback: Embedded SQLite + High-performance Cosine Store      |
- |  - Knowledge Graph: Relational Node & Edge JSON hierarchy               |
- +-------------------------------------------------------------------------+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                            AI TEACHER BRAIN                                 │
+│  - Document Ingestion & Section Preservation (PDF, DOCX, TXT)               │
+│  - Grounded RAG Retrieval (Vector + BM25 Cosine)                            │
+│  - General Subject Learning Roadmaps & Public Web Research                  │
+│  - Misconception Engine & Socratic Pedagogy                                 │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │ Spoken Text + Pedagogical Context
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       REUSABLE AVATAR ENGINE (Python)                       │
+│  ├── VisemeEngine: Deterministic Rhubarb 2D Phoneme-to-Viseme Timelines    │
+│  ├── ExpressionEngine: Pedagogical Emotion Curves (8 Expression States)    │
+│  ├── Latency Tracker: Checkpoints for Audio Ready & First Avatar Frame      │
+│  └── Cost Accounting: Active Speaking Time Accounting vs ≤ ₹10/min SLA      │
+└──────────────────────────────────────┬──────────────────────────────────────┘
+                                       │ Timed Event Stream (Visemes & Expressions)
+                                       ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                       PRESENTATION & RENDERING LAYER                        │
+│  ├── Local Nova (Mode A): Client Browser SVG Visor (₹0.00/min Server GPU)   │
+│  ├── Cloud Video (Mode B): Optional WebRTC Streaming (HeyGen / GPU)         │
+│  └── Text Fallback (Mode C): Instant Subtitle Mode (Zero Lag Resilience)     │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 2. Core Pedagogical Loop
+## 2. Component Specifications
 
-Instead of standard Chatbot QA (`Query -> Search -> Answer`), LEARNOVA executes an adaptive learning cycle:
+### 2.1 TeacherBrain (`backend/teacher_brain.py`)
+- **Role:** Autonomous teaching intelligence.
+- **Modes:** `explain`, `simplify`, `example`, `analogy`, `visual`, `deep_dive`, `socratic`, `exam`, `remediate`.
+- **General Learning:** Generates multi-week roadmaps (e.g. "I want to learn Python", "I want to learn C++") with zero fallback to demo documents.
+- **Grounding Guard:** Answers are anchored to uploaded document chunks or verified curriculum concepts.
 
-```
-                  [ Student Question / Response ]
-                                 │
-                                 ▼
-                     [ Comprehension Check ]
-                     /                     \
-       [ Misconception Detected? ]          [ Valid Understanding ]
-              │                                      │
-              ▼                                      ▼
-      Identify Concept & Root            Reinforce & Deepen Topic
-      Select Remediation Strategy        Offer Analogy / Application
-      (Analogy / Step-by-Step)                       │
-              │                                      ▼
-              ▼                              Interactive Quiz
-      Present Visual Whiteboard                      │
-              │                                      ▼
-              └─────────────────────────────► Teach-Back Challenge
-                                                     │
-                                                     ▼
-                                            Log Concept Mastery
-```
+### 2.2 AvatarEngine (`backend/services/avatar_engine.py`)
+- **Role:** Central orchestrator for the live avatar pipeline.
+- **Input:** `{ text, audio?, emotion?, speaking_style?, language?, mode? }`
+- **Output:** `{ audio, duration_ms, viseme_timeline, expression_timeline, start_latency_ms, render_mode, cost_estimate }`
+- **Cost Calculation:** Tracks variable costs per active minute ($\text{Target} \le \text{₹}10.00/\text{min}$).
 
----
+### 2.3 VisemeEngine (`backend/services/viseme_engine.py`)
+- **Role:** Deterministic speech-to-mouth mapping without simulated oscillation.
+- **Standard:** Rhubarb 2D standard shapes:
+  - `A` (Closed: M, B, P), `B` (Teeth: S, T, D, K), `C` (Open: EH, AE), `D` (Wide: AA, AY),
+  - `E` (Rounded: AO, ER), `F` (Puckered: UW, OW), `G` (Teeth-on-lip: F, V), `H` (Tongue: L), `X` (Rest).
+- **Timing:** Phonetic syllable decomposition calibrated to speech rate (110–185 WPM).
 
-## 3. Data Schemas
+### 2.4 ExpressionEngine (`backend/services/expression_engine.py`)
+- **Role:** Dynamic facial expression curve generation.
+- **Expressions:** `idle`, `listening`, `thinking`, `explaining`, `encouraging`, `celebrating`, `remediating`, `questioning`.
+- **Behavior:** Dynamically sequences multi-stage expressions based on sentence tone and punctuation.
 
-### 3.1 Document & Chunks
-```json
-{
-  "document_id": "doc_abc123",
-  "title": "Computer Networks: Principles & Protocols",
-  "file_type": "pdf",
-  "page_count": 12,
-  "chunks": [
-    {
-      "chunk_id": "chk_001",
-      "page_number": 2,
-      "section": "The OSI Reference Model",
-      "content": "The Transport Layer provides transparent transfer of data between end systems...",
-      "source_type": "text"
-    }
-  ]
-}
-```
+### 2.5 BrowserRenderer (`frontend/src/components/avatar/LocalAvatarProvider.tsx`)
+- **Role:** High-performance, client-side vector avatar rendering.
+- **Mechanics:** `requestAnimationFrame` loop indexes elapsed time into the viseme and expression timelines to update SVG mouth and eyebrow shapes with zero layout thrashing.
 
-### 3.2 Knowledge Graph (Concepts & Relationships)
-```json
-{
-  "concepts": [
-    {
-      "id": "c_transport_layer",
-      "name": "Transport Layer",
-      "category": "OSI Layer",
-      "summary": "End-to-end communication, reliability, and flow control.",
-      "page_number": 2,
-      "mastery_score": 0.0
-    }
-  ],
-  "relationships": [
-    {
-      "source": "c_transport_layer",
-      "target": "c_tcp_udp",
-      "type": "depends_on" // depends_on | part_of | example_of
-    }
-  ]
-}
-```
+### 2.6 BenchmarkEngine (`backend/services/avatar_benchmark.py`)
+- **Role:** Automated testing across 15 standard fixtures (`backend/tests/fixtures/avatar_benchmark.json`).
+- **Metrics:** First-frame latency, lip-sync alignment score, expression congruence score, and cost per minute.
 
-### 3.3 Misconception Schema
-```json
-{
-  "is_misconception": true,
-  "concept": "TCP vs UDP",
-  "student_statement": "UDP is reliable because it is faster.",
-  "misconception": "Equating transmission speed with connection reliability.",
-  "severity": "medium",
-  "remediation_strategy": "Separate protocol speed from delivery guarantees using a postal mail analogy."
-}
-```
+### 2.7 EvaluationEngine (`backend/services/evaluation_engine.py`)
+- **Role:** 10-dimension pedagogical quality assessment.
+- **Dimensions:** Relevance, Accuracy, Completeness, Clarity, Actionability, Personalisation, Structure, Level Appropriateness, Human Likeness, Coherence.
+- **Stability:** Repeated trials calculate mean, median, standard deviation, and range.
 
-### 3.4 Visual Whiteboard Payload
-```json
-{
-  "type": "comparison_table", // flowchart | concept_map | comparison_table | timeline | code_process
-  "title": "TCP vs. UDP: Guarantee vs. Speed",
-  "data": {
-    "headers": ["Feature", "TCP (Transmission Control)", "UDP (User Datagram)"],
-    "rows": [
-      ["Connection", "Connection-oriented (3-way handshake)", "Connectionless"],
-      ["Reliability", "Guaranteed delivery with retransmissions", "Best-effort delivery"],
-      ["Header Size", "20-60 bytes", "8 bytes fixed"],
-      ["Primary Use", "Web, Email, File Transfer", "Live Streaming, Online Gaming"]
-    ]
-  },
-  "source": { "page": 3, "section": "Transport Layer Protocols" }
-}
-```
-
----
-
-## 4. Voice and Avatar Presentation Architecture
-
-- **Audio Viseme Sync**: When the AI teacher speaks, an audio analyzer extracts real-time frequency data, driving synchronized mouth movements, eye blinks, and emotional expressions (Explaining, Listening, Thinking, Celebrating).
-- **Graceful Degradation Ladder**:
-  1. *Tier 1 (Cloud)*: LiveKit WebRTC / HeyGen streaming if API keys are configured.
-  2. *Tier 2 (Browser Native)*: Web Speech API Synthesis + SpeechRecognition + Canvas/SVG Viseme Teacher.
-  3. *Tier 3 (Text)*: Instant readable chat with interactive visual whiteboard cards.
-- Result: **Zero crashes**. The application is 100% functional regardless of external cloud service status.
-
----
-
-## 5. Security & Ponytail Compliance
-- Zero hardcoded API keys. All credentials reside in `.env`.
-- Input file size and MIME-type validation.
-- Minimal abstraction layers: Direct FastAPI endpoints, standard Pydantic models, standard React component state.
+### 2.8 ScreenUnderstanding & Companions (`backend/screen_understanding.py`)
+- **Role:** Multimodal visual guidance (WHAT, WHY, NEXT) with visual pointer coordinates.
+- **Browser Extension (`browser-extension/`):** Manifest V3 extension providing non-intrusive DOM inspection and element guidance.
+- **Desktop Companion (`desktop/`):** Native Tauri architecture specification for global OS hotkeys and overlay guidance.
