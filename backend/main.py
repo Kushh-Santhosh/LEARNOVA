@@ -131,6 +131,42 @@ DOCUMENTS: Dict[str, Dict[str, Any]] = {
 retriever.index_document(DEMO_DOCUMENT_ID, DEMO_CHUNKS)
 kg_set(DEMO_DOCUMENT_ID, DEMO_CONCEPTS, DEMO_RELATIONSHIPS)
 
+# Auto-index existing study materials in backend/uploads on startup
+_uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+if os.path.exists(_uploads_dir):
+    for _fname in sorted(os.listdir(_uploads_dir)):
+        if _fname.endswith((".pdf", ".docx", ".txt", ".md")) and not _fname.startswith("."):
+            _fpath = os.path.join(_uploads_dir, _fname)
+            try:
+                _doc_id = f"doc_{os.path.splitext(_fname)[0]}"
+                if _fname.endswith(".pdf"):
+                    _secs, _chks = DocumentProcessor.extract_from_pdf(_fpath, _doc_id)
+                    _ftype = "pdf"
+                elif _fname.endswith(".docx"):
+                    _secs, _chks = DocumentProcessor.extract_from_docx(_fpath, _doc_id)
+                    _ftype = "docx"
+                else:
+                    with open(_fpath, "r", encoding="utf-8", errors="ignore") as _f:
+                        _secs, _chks = DocumentProcessor.extract_from_text(_f.read(), _doc_id, _fname)
+                    _ftype = "text"
+                _concs, _rels = DocumentProcessor.extract_concepts_and_graph(_chks, _fname)
+                retriever.index_document(_doc_id, _chks)
+                kg_set(_doc_id, _concs, _rels)
+                DOCUMENTS[_doc_id] = {
+                    "id": _doc_id,
+                    "title": os.path.splitext(_fname)[0].replace("_", " ").title(),
+                    "filename": _fname,
+                    "file_type": _ftype,
+                    "language": "en",
+                    "sections": _secs,
+                    "page_count": max([c.get("page_number", 1) for c in _chks]) if _chks else 1,
+                    "chunk_count": len(_chks),
+                    "concept_count": len(_concs),
+                    "is_demo": False
+                }
+            except Exception:
+                pass
+
 
 # --- Request/Response Schemas ---
 class LearnerProfileRequest(BaseModel):
@@ -279,9 +315,10 @@ async def upload_document(file: UploadFile = File(...)):
     Stream-written in chunks to protect server memory, with strict prompt-injection defense
     and automatic script/language detection.
     """
-    os.makedirs("uploads", exist_ok=True)
+    uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+    os.makedirs(uploads_dir, exist_ok=True)
     filename = file.filename or "uploaded_doc.txt"
-    file_path = os.path.join("uploads", filename)
+    file_path = os.path.join(uploads_dir, filename)
 
     # Scalable stream writing with 100MB server safety threshold
     MAX_BYTES = 100 * 1024 * 1024

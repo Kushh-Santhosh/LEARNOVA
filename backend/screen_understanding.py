@@ -418,12 +418,22 @@ class ScreenUnderstandingService:
 
         curr_step = steps[step_number - 1]
         expected_route = curr_step["route"]
+        expected_target = curr_step.get("target_id")
 
-        # If step expected route change or modal display
-        route_matches = (current_route == expected_route) or (step_number == 1 and current_route != "home")
-        has_evidence = dom_evidence.get("target_clicked", True) if dom_evidence else True
+        # Check route match: must strictly match the expected route
+        route_matches = (current_route == expected_route)
 
-        if route_matches and has_evidence:
+        # Check DOM evidence if provided
+        target_clicked = True
+        if dom_evidence:
+            if "target_clicked" in dom_evidence:
+                target_clicked = bool(dom_evidence["target_clicked"])
+            elif "clicked_id" in dom_evidence:
+                target_clicked = (dom_evidence["clicked_id"] == expected_target)
+
+        is_verified = route_matches and target_clicked
+
+        if is_verified:
             is_finished = (step_number >= len(steps))
             return {
                 "status": "COMPLETED" if is_finished else "STEP_COMPLETED",
@@ -438,7 +448,7 @@ class ScreenUnderstandingService:
                 "verified": False,
                 "current_step": step_number,
                 "next_step": step_number,
-                "message": f"Looking for {curr_step['label']}. Please click the highlighted area to proceed."
+                "message": f"Looking for {curr_step['label']}. Please click the highlighted {curr_step['label']} area to proceed."
             }
 
     def _default_coordinates_for_target(self, target_id: str, route: str) -> Dict[str, Any]:

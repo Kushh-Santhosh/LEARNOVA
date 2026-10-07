@@ -189,8 +189,16 @@ class AvatarEngine:
         requested_mode = mode or self.default_mode
         effective_mode = requested_mode
 
-        # Real failover path: Mode B requested without configured HeyGen credentials
-        if requested_mode == "mode_b_hq":
+        VALID_MODES = {"mode_a_local", "mode_b_hq", "mode_c_text"}
+        if requested_mode not in VALID_MODES:
+            effective_mode = self.default_mode
+            failover_info = {
+                "provider_attempted": requested_mode,
+                "failure_reason": f"UNSUPPORTED_MODE_{requested_mode.upper()}",
+                "fallback_mode": self.default_mode,
+                "fallback_graceful": True
+            }
+        elif requested_mode == "mode_b_hq":
             heygen_key = os.getenv("HEYGEN_API_KEY", "").strip()
             if not heygen_key:
                 effective_mode = "mode_a_local"
