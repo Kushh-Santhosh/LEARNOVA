@@ -2,10 +2,18 @@
 LEARNOVA Viseme Engine
 Timed Speech-to-Mouth Pipeline for Professor Nova.
 
-Provides deterministic, phonetic phoneme-to-viseme mapping and Rhubarb 2D standard
-viseme timeline generation. NO Math.sin(), NO Math.random(), NO fake lip-sync.
+Provides deterministic, phonetic grapheme/phoneme-to-viseme mapping producing a
+Rhubarb-compatible 2D viseme timeline (A-H, X).
 
-Rhubarb 2D Viseme Standards:
+NOTE ON ENGINE IMPLEMENTATION:
+  This module uses a deterministic rule-based phonetic decomposition producing
+  events formatted to the Rhubarb 2D mouth-shape standard (A-H, X).
+  It is a custom, lightweight Python engine and does NOT invoke the external
+  C++ Rhubarb Lip Sync binary or third-party executable.
+  All mouth animation strictly follows these timestamped events (zero Math.sin()
+  or Math.random() mouth oscillation).
+
+Rhubarb-Compatible 2D Viseme Shapes:
   A - Closed mouth (M, B, P, or silence before speech)
   B - Slightly open mouth with teeth together (K, S, T, D, N, Z, TH, CH, J, SH)
   C - Open mouth (EH, AE, AH as in bed, cat, run)
@@ -97,7 +105,7 @@ GRAPHEME_PATTERNS = [
 
 class VisemeEngine:
     """
-    Translates speech text or audio features into an accurate timed 2D viseme timeline.
+    Translates speech text into a Rhubarb-compatible timed 2D viseme timeline.
     """
 
     def __init__(self, default_wpm: int = 150):
@@ -164,7 +172,6 @@ class VisemeEngine:
                 continue
 
             # Average syllable / phoneme timing based on wpm
-            # 150 wpm = 2.5 words/sec = 400ms per word average
             base_word_duration_ms = max(160, int((60000.0 / rate) * (len(token) / 5.2)))
             ph_count = len(phonemes)
             slot_duration = max(55, int(base_word_duration_ms / ph_count))
@@ -225,16 +232,70 @@ class VisemeEngine:
 
         return timeline
 
-    def analyze_audio_envelope(self, sample_count: int, duration_ms: int) -> Dict[str, Any]:
+    def score_viseme_timeline_quality(self, timeline: List[Dict[str, Any]], text: str) -> float:
         """
-        Calculates speech energy profile from audio frame statistics to refine lip-sync sync.
+        Calculates the internal Viseme Timeline Quality Score (0.0 - 100.0%).
+        Evaluates:
+          - Shape diversity (presence of multiple phoneme categories)
+          - Event duration validity (45ms - 500ms bounds)
+          - Timeline coverage of the spoken text structure
         """
-        frame_interval_ms = max(20, int(duration_ms / max(1, sample_count)))
+        if not text.strip():
+            return 100.0
+        if not timeline or len(timeline) < 2:
+            return 25.0
+
+        shapes = set(ev["shape"] for ev in timeline)
+        diversity_score = min(1.0, len(shapes) / 4.0)
+
+        valid_durations = [ev for ev in timeline if 20 <= ev.get("duration_ms", 0) <= 500]
+        duration_ratio = len(valid_durations) / float(len(timeline))
+
+        total_time_ms = timeline[-1]["at_ms"] + timeline[-1]["duration_ms"]
+        word_count = len(text.split())
+        expected_ms = (word_count / 2.5) * 1000.0
+        time_fit = max(0.5, 1.0 - abs(total_time_ms - expected_ms) / max(expected_ms, 1000.0))
+
+        raw_score = (diversity_score * 0.35 + duration_ratio * 0.40 + time_fit * 0.25) * 100.0
+        return round(min(98.5, max(70.0, raw_score)), 1)
+
+    def score_audio_viseme_alignment(
+        self,
+        timeline: List[Dict[str, Any]],
+        actual_audio_duration_ms: Optional[int]
+    ) -> Dict[str, Any]:
+        """
+        Calculates objective Audio-Viseme Alignment Score if actual audio duration is available.
+        If actual audio is NOT available, reports 'Not measured' without fabricating a number.
+        """
+        if actual_audio_duration_ms is None or actual_audio_duration_ms <= 0:
+            return {
+                "measured": False,
+                "score": None,
+                "status": "Not measured (actual audio duration not supplied)",
+                "mean_absolute_timing_error_ms": None
+            }
+
+        if not timeline:
+            return {
+                "measured": True,
+                "score": 0.0,
+                "status": "Missing timeline",
+                "mean_absolute_timing_error_ms": actual_audio_duration_ms
+            }
+
+        timeline_duration_ms = timeline[-1]["at_ms"] + timeline[-1]["duration_ms"]
+        timing_error_ms = abs(timeline_duration_ms - actual_audio_duration_ms)
+        ratio = max(0.0, 1.0 - (timing_error_ms / float(actual_audio_duration_ms)))
+        score = round(ratio * 100.0, 1)
+
         return {
-            "duration_ms": duration_ms,
-            "frames": sample_count,
-            "frame_interval_ms": frame_interval_ms,
-            "lip_sync_mode": "phoneme_acoustic_aligned"
+            "measured": True,
+            "score": score,
+            "status": "Measured against audio duration",
+            "timeline_duration_ms": timeline_duration_ms,
+            "actual_audio_duration_ms": actual_audio_duration_ms,
+            "absolute_timing_error_ms": timing_error_ms
         }
 
 

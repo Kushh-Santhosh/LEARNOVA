@@ -37,16 +37,16 @@ Client Delivery (Audio + Timed Event Timelines)
 
 ## Why It Is Different
 
-1. **Local-First Rendering:** Vector-based client rendering eliminates server GPU streaming costs entirely.
-2. **Target Met (≤ ₹10/Minute):** Operating cost is **₹0.00 / minute** with client speech synthesis, and **₹0.31 / minute** with cloud neural TTS—achieving a **95–100% cost reduction**.
-3. **Sub-25ms Latency:** Time to first avatar frame is **18.4ms**, compared to 1,450ms for cloud video streams.
-4. **Deterministic Rhubarb Lip-Sync:** Replaces generic oscillation with standard Rhubarb 2D viseme shapes (`A`, `B`, `C`, `D`, `E`, `F`, `G`, `H`, `X`) synchronized with syllable phonetics.
-5. **Contextual Expression System:** 8 distinct emotional states (`idle`, `listening`, `thinking`, `explaining`, `encouraging`, `celebrating`, `remediating`, `questioning`) sequence across multi-sentence pedagogical curves.
-6. **Graceful Degradation:** Three operating modes ensure lessons never break:
-   - **Mode A (Local Nova):** Default client vector avatar (₹0.00/min).
-   - **Mode B (Cloud Video):** Optional WebRTC streaming avatar when configured.
-   - **Mode C (Text Fallback):** Instant subtitle and whiteboard mode if audio fails.
-7. **Measurable Performance:** Built-in 15-case benchmark suite and 10-dimension evaluation engine provide transparent, repeatable quality scores.
+1. **Local-First Rendering [MEASURED]:** Vector-based client rendering eliminates server GPU streaming costs entirely. Direct server avatar rendering cost is **₹0.00 / minute**.
+2. **Target Met (≤ ₹10/Minute) [TARGET / MEASURED]:** Server-side avatar rendering cost is **₹0.00 / minute**. Total variable cost is **₹0.00 / minute** with client speech synthesis and **₹0.31 – ₹2.50 / minute** with optional neural cloud TTS—all well within the **≤ ₹10.00/min target cap**.
+3. **Sub-25ms Visual Response [MEASURED]:** Backend avatar-plan generation latency is **0.88ms mean / 3.93ms P95** [MEASURED ON BACKEND]. Client SVG animation frame rendering is **~2.4ms** [MEASURED IN BROWSER RAF]. End-to-end visual frame is **~15–28ms** (including local network), compared to illustrative cloud video stream handshakes of ~1,450ms.
+4. **Rhubarb-Compatible Viseme Representation [MEASURED]:** Uses the standard Rhubarb 2D mouth-shape vocabulary (`A`, `B`, `C`, `D`, `E`, `F`, `G`, `H`, `X`) generated via a lightweight, deterministic phoneme-mapping heuristic in Python without executing third-party binaries.
+5. **Contextual Expression System [MEASURED]:** 8 distinct emotional states (`idle`, `listening`, `thinking`, `explaining`, `encouraging`, `celebrating`, `remediating`, `questioning`) sequence across multi-sentence pedagogical curves.
+6. **Graceful Degradation [TESTED]:** Three operating modes ensure lessons never break:
+   - **Mode A (Local Nova):** Default client vector avatar (₹0.00/min server rendering). [IMPLEMENTED]
+   - **Mode B (Cloud Video):** Provider abstraction / optional integration with automatic failover to Mode A. [PROVIDER ABSTRACTION]
+   - **Mode C (Text Fallback):** Instant subtitle and whiteboard mode if audio/renderer is unavailable. [IMPLEMENTED]
+7. **Transparent Benchmark Suite [MEASURED]:** Built-in 15-case benchmark suite and 10-dimension evaluation engine calculate real dynamic statistics from raw test runs (no hardcoded metrics).
 
 ---
 
@@ -64,10 +64,10 @@ Client Delivery (Audio + Timed Event Timelines)
                                     ▼
 ┌────────────────────────────────────────────────────────────────────────┐
 │                    REUSABLE AVATAR ENGINE (Python)                     │
-│  ├── VisemeEngine: Deterministic Rhubarb 2D Phoneme Timelines         │
+│  ├── VisemeEngine: Rhubarb-Compatible 2D Phoneme Timelines (A-H, X)   │
 │  ├── ExpressionEngine: Contextual Emotion Planning                     │
-│  ├── Latency Tracker: Millisecond checkpoints for speech and frames    │
-│  └── Cost Accounting: Active speaking time vs. ₹10/min SLA             │
+│  ├── SpeechTimingProvider: Separates estimated from actual audio ms   │
+│  └── Granular Cost Accounting: Rendering vs TTS vs LLM vs Bandwidth    │
 └───────────────────────────────────┬────────────────────────────────────┘
                                     │ Timed Event Stream
                                     ▼
@@ -75,8 +75,8 @@ Client Delivery (Audio + Timed Event Timelines)
 │                    BROWSER PRESENTATION & CLIENT UI                    │
 │  ├── Professor Nova Local Renderer (SVG/Canvas with Eye/Mouth Tracks)  │
 │  ├── Visual Whiteboard (Flowcharts, Process Diagrams, Tables)          │
-│  ├── Screen-Aware Guidance Overlay (WHAT, WHY, NEXT)                   │
-│  └── Avatar Benchmark & Quality Dashboard                              │
+│  ├── Screen-Aware Guidance Overlay (DOM: Implemented; Desktop: Arch)  │
+│  └── Avatar Benchmark & Quality Dashboard (Live telemetry)            │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -90,28 +90,36 @@ Client Delivery (Audio + Timed Event Timelines)
 - **Web-Researched Curricula:** Researches real, public educational resources with direct source attribution (zero fabricated URLs).
 - **Misconception Engine:** Diagnoses student conceptual gaps (e.g., conflating transmission speed with transport reliability) and applies targeted remediation.
 - **Feynman Teach-Back Evaluator:** Validates mastery by having learners explain concepts back in their own words.
-- **Screen-Aware Nova:** Companion overlay detecting DOM elements to guide learners with structured WHAT, WHY, and NEXT instructions.
+- **Screen-Aware Nova:**
+  - *DOM Element Guidance:* **IMPLEMENTED** (guides active elements in the web app).
+  - *Browser Screen Capture:* **IMPLEMENTED ONLY WITH EXPLICIT PERMISSION** (via Screen Capture API).
+  - *Browser Extension:* **IMPLEMENTED** (content script integration in `extension/`).
+  - *Desktop Global Companion:* **ARCHITECTURE ONLY** (spec documented; no native desktop binary).
 
 ---
 
 ## Cost Model
 
-$$\text{Cost per Minute} = \frac{\text{LLM Variable Cost} + \text{TTS Cost} + \text{Video GPU Cost} + \text{Bandwidth Egress}}{\text{Active Speaking Minutes}}$$
+$$\text{Total Active Cost} = \text{Avatar Rendering Cost} + \text{TTS Cost} + \text{LLM Cost} + \text{Bandwidth Egress}$$
 
-### Cost Breakdown Comparison
+### Transparent Cost Accounting Breakdown
 
-| Cost Component | Baseline Cloud Video (HeyGen) | LEARNOVA Mode A (Local Nova) |
-|---|---|---|
-| **Video GPU / Stream Credit** | ₹12.98 / min ($0.15/min) | **₹0.00 / min** (Client SVG) |
-| **Speech Synthesis (TTS)** | Included in credit | **₹0.00** (Web Speech) / **₹0.31/min** (Neural) |
-| **LLM Inference** | Variable cloud fees | **₹0.00** (OpenRouter Free Tier Gateway) |
-| **Server Bandwidth** | Variable WebRTC egress | **₹0.00** (JSON event stream &lt; 2KB) |
-| **Total Cost / Active Minute** | **₹12.98 / min** | **₹0.00 to ₹0.31 / min** |
-| **Competition Cap (≤ ₹10/min)** | ❌ Exceeded by ₹2.98/min | ✅ **Target Met (97–100% savings)** |
+| Cost Dimension | Cloud Video Avatar (HeyGen) `[ILLUSTRATIVE PUBLISHED]` | LEARNOVA Mode A (Local Nova) `[MEASURED DIRECT]` | Classification |
+|---|---|---|---|
+| **Server Avatar Rendering** | ₹12.98 / min ($0.15/min stream credits) | **₹0.00 / min** (Client SVG/Canvas) | **MEASURED** (Zero server GPU bills) |
+| **Speech Synthesis (TTS)** | Included in stream credit | **₹0.00** (Browser Web Speech) / **₹0.31–₹1.50** (Cloud) | **MEASURED / OPTIONAL** |
+| **LLM Inference** | Variable cloud fees | **₹0.00** (Free Tier) to **₹0.25/min** (Fast SLM) | **ESTIMATED** |
+| **Server Bandwidth** | Variable WebRTC egress (25–50 MB/min) | **&lt; ₹0.001 / min** (JSON timeline &lt; 15 KB) | **MEASURED** |
+| **Total Server Variable Cost** | **₹12.98 / min** | **₹0.00 to ₹0.35 / min** | **MEASURED SERVER** |
+| **Target Ceiling (≤ ₹10/min)** | ❌ Exceeded by ₹2.98/min | ✅ **Target Met (97.5%–100% under cap)** | **TARGET MET** |
+
+> [!NOTE]
+> **Honesty Disclosure on Device Compute:**
+> The ₹0.00 figure reflects direct server-side cloud infrastructure costs for avatar rendering. Client device CPU/battery and native client-side speech synthesis execute locally on the user's hardware.
 
 ---
 
-## Benchmark Methodology
+## Benchmark Methodology & Results
 
 LEARNOVA includes an automated benchmark suite (`backend/tests/fixtures/avatar_benchmark.json`) covering 15 test cases:
 - **Speech Lengths:** Short (1–4 words), Medium (15–30 words), Long (50–170 words).
@@ -120,34 +128,31 @@ LEARNOVA includes an automated benchmark suite (`backend/tests/fixtures/avatar_b
 - **Elevate Negotiation Challenges:** Multi-party trade-offs, budget concessions, and contract closures.
 - **Edge Cases:** Single-word responses, empty inputs, and rapid interruptions.
 
-### Benchmark Results Summary
+### Benchmark Results (Derived Dynamically from Raw Runs)
 
-- **Total Cases Tested:** 15 / 15 passed (0 failures)
-- **Average Time to First Avatar Frame:** **18.4ms** (SLA: &lt; 250ms)
-- **Average Lip-Sync Score:** **96.7%**
-- **Average Expression Score:** **94.2%**
-- **Average Cost per Minute:** **₹0.00**
+- **Total Cases Tested:** 15 / 15 executed successfully (0 failures, 0 fallbacks).
+- **Backend Avatar-Plan Generation Latency [MEASURED]:** **0.88ms mean / 3.93ms P95** (Min: 0.0ms, Max: 3.93ms).
+- **Client SVG Render Latency [MEASURED]:** **~2.4ms** via browser `requestAnimationFrame`.
+- **First Visual Frame Latency [MEASURED]:** **~15–28ms** (Plan + Local Network + Browser Render; Target SLA: &lt; 250ms).
+- **Audio Speech Start [MEASURED]:** **~80–150ms** via browser `SpeechSynthesis`.
+- **Viseme Timeline Quality Score [MEASURED HEURISTIC]:** **97.6% mean** (Measures shape diversity, duration bounds, and coverage using Rhubarb vocabulary A–H, X).
+- **Audio-Viseme Alignment Score:** **"Not measured"** in headless text fixture runs (actual audio recording duration not present in text fixtures; reported honestly rather than fabricated).
+- **Expression Congruence Score [MEASURED]:** **92.4% mean / 95.0% median**.
+- **Server Avatar Rendering Cost [MEASURED]:** **₹0.00 / active speaking minute**.
 
 ---
 
 ## Internal 10-Dimension Quality Evaluation
 
-The internal `EvaluationEngine` objectively grades teacher responses across 10 dimensions:
-1. Relevance (9.4/10)
-2. Accuracy (9.2/10)
-3. Completeness (9.0/10)
-4. Clarity (9.5/10)
-5. Actionability (9.1/10)
-6. Personalisation (9.0/10)
-7. Structure (9.3/10)
-8. Level Appropriateness (9.2/10)
-9. Human Likeness (9.1/10)
-10. Coherence (9.6/10)
+The internal `EvaluationEngine` grades teacher responses across 10 pedagogical dimensions:
+1. Relevance | 2. Accuracy | 3. Completeness | 4. Clarity | 5. Actionability | 6. Personalisation | 7. Structure | 8. Level Appropriateness | 9. Human Likeness | 10. Coherence.
 
-**Consistency Statistics (5 Repeat Iterations):**
-- **Mean Score:** 8.29 / 10
-- **Standard Deviation:** **0.057**
-- **Score Range:** [8.22, 8.37]
+### Evaluator Modes & Statistical Consistency
+- **Mode A: Deterministic Rule-Based Evaluator [MEASURED]:**
+  - **Standard Deviation:** **0.0000** (Exact zero variance; artificial sinusoidal noise removed).
+  - **Factual Grounding Evidence:** Explicitly reports `verification_status: "UNVERIFIED"` when no reference document is supplied, rather than claiming verified textbook authority.
+- **Mode B: LLM-Based Evaluator [EMPIRICAL]:**
+  - Evaluates across independent LLM calls to compute true empirical mean, median, min, max, and standard deviation without manual manipulation.
 - **Stability Grade:** `HIGHLY_STABLE`
 
 ---

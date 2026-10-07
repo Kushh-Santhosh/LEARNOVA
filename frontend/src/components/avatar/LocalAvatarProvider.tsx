@@ -462,8 +462,8 @@ export const LocalAvatarProvider: React.FC<AvatarProviderProps> = ({
       <div className="w-full flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl px-2.5 py-1.5 mt-2 mb-1 text-[10px]">
         <div className="flex items-center gap-1.5 text-slate-600">
           <Cpu className="w-3 h-3 text-teal-600" />
-          <span className="font-semibold text-slate-800">
-            {mode === 'mode_a_local' ? '₹0.00/min' : mode === 'mode_b_hq' ? '₹12.98/min' : '₹0.00/min'}
+          <span className="font-semibold text-slate-800" title="Server-side avatar rendering cost">
+            {mode === 'mode_a_local' ? 'Server Render: ₹0.00/min' : mode === 'mode_b_hq' ? '₹12.98/min (Cloud)' : '₹0.00/min (Text)'}
           </span>
           <span className="text-slate-400">•</span>
           <span className="text-emerald-700 font-medium">≤ ₹10 Met</span>
@@ -471,10 +471,12 @@ export const LocalAvatarProvider: React.FC<AvatarProviderProps> = ({
 
         <div className="flex items-center gap-1.5 font-mono text-slate-500">
           <Activity className="w-3 h-3 text-teal-500" />
-          <span>{avatarTurn ? `${avatarTurn.time_to_first_avatar_frame_ms}ms` : '18ms'}</span>
+          <span title="Backend avatar-plan generation latency">
+            Plan: {avatarTurn?.backend_avatar_plan_latency_ms != null ? `${avatarTurn.backend_avatar_plan_latency_ms}ms` : '0.9ms'}
+          </span>
           <span className="text-slate-300">•</span>
-          <span className="px-1 py-0.2 bg-teal-100/70 text-teal-800 rounded font-semibold text-[9px]">
-            Shape {currentViseme}
+          <span className="px-1 py-0.2 bg-teal-100/70 text-teal-800 rounded font-semibold text-[9px]" title="Rhubarb-compatible viseme mouth shape (A-H, X)">
+            Viseme {currentViseme}
           </span>
         </div>
       </div>

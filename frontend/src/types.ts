@@ -119,6 +119,11 @@ export interface ExpressionEvent {
 
 export interface AvatarCostEstimate {
   active_speaking_minutes: number;
+  avatar_rendering_cost_per_active_minute?: number;
+  tts_cost_per_active_minute?: number;
+  llm_cost_per_active_minute?: number;
+  bandwidth_cost_per_active_minute?: number;
+  total_variable_cost_per_active_minute?: number;
   tts_cost_inr: number;
   render_cost_inr: number;
   llm_cost_inr: number;
@@ -129,19 +134,57 @@ export interface AvatarCostEstimate {
   mode: string;
 }
 
+export interface ClientAvatarTelemetry {
+  request_started_ms: number;
+  avatar_response_received_ms: number;
+  avatar_render_started_ms: number;
+  first_animation_frame_ms: number;
+  speech_started_ms: number;
+  backend_plan_latency_ms: number;
+  network_latency_ms: number;
+  client_render_latency_ms: number;
+  time_to_first_visual_frame_ms: number;
+  time_to_audio_start_ms: number;
+  end_to_end_start_latency_ms: number;
+}
+
+export interface AudioVisemeAlignmentResult {
+  status: string;
+  alignment_score?: number | null;
+  error_ms?: number | null;
+  note?: string;
+  mean_absolute_timing_error_ms?: number | null;
+  p95_timing_error_ms?: number | null;
+  speech_coverage_pct?: number | null;
+}
+
+export interface FailoverInfo {
+  provider_attempted?: string;
+  failure_reason?: string;
+  fallback_mode?: string;
+  fallback_graceful?: boolean;
+}
+
 export interface AvatarTurn {
   text: string;
   audio?: string | null;
   duration_ms: number;
+  estimated_duration_ms?: number;
+  actual_audio_duration_ms?: number | null;
   viseme_timeline: VisemeEvent[];
   expression_timeline: ExpressionEvent[];
-  start_latency_ms: number;
-  time_to_audio_ms: number;
-  time_to_first_avatar_frame_ms: number;
-  total_processing_ms: number;
+  start_latency_ms?: number;
+  time_to_audio_ms?: number;
+  backend_avatar_plan_latency_ms: number;
+  time_to_first_avatar_frame_ms?: number; // backwards compatibility alias
+  total_processing_ms?: number;
+  viseme_timeline_quality_score?: number;
+  audio_viseme_alignment?: AudioVisemeAlignmentResult;
   render_mode: 'mode_a_local' | 'mode_b_hq' | 'mode_c_text' | string;
   provider: string;
   cost_estimate: AvatarCostEstimate;
+  failover?: FailoverInfo;
+  client_telemetry?: ClientAvatarTelemetry;
 }
 
 export interface BenchmarkCaseResult {
@@ -150,24 +193,64 @@ export interface BenchmarkCaseResult {
   type: string;
   word_count: number;
   duration_ms: number;
-  time_to_audio_ms: number;
-  time_to_first_avatar_frame_ms: number;
-  total_processing_ms: number;
+  actual_audio_duration_ms?: number | null;
+  time_to_audio_ms?: number;
+  backend_avatar_plan_latency_ms: number;
+  time_to_first_avatar_frame_ms?: number;
+  total_processing_ms?: number;
   viseme_event_count: number;
   expression_event_count: number;
-  lip_sync_score: number;
+  viseme_timeline_quality_score: number;
+  lip_sync_score?: number; // backwards compatibility alias
+  audio_alignment_score?: string | number | null;
   expression_score: number;
-  responsiveness: string;
+  responsiveness?: string;
   cost_per_minute_inr: number;
   target_met: boolean;
+  failure?: boolean;
+  fallback?: boolean;
   error?: string;
+  browser_first_frame_latency_ms?: number | null;
 }
 
 export interface BenchmarkReport {
   total_cases: number;
   successful_cases: number;
   failure_count: number;
-  metrics: {
+  fallback_count?: number;
+  statistics?: {
+    backend_avatar_plan_latency_ms: {
+      mean: number;
+      median: number;
+      p95: number;
+      min: number;
+      max: number;
+      metric_label: string;
+    };
+    viseme_timeline_quality_score: {
+      mean: number;
+      median: number;
+      min: number;
+      max: number;
+      metric_label: string;
+    };
+    audio_viseme_alignment_score: {
+      status: string;
+      note: string;
+    };
+    expression_congruence_score: {
+      mean: number;
+      median: number;
+    };
+    total_variable_cost_per_minute_inr: {
+      mean: number;
+      target_cap_inr: number;
+      target_achieved: boolean;
+      server_avatar_rendering_cost_inr: number;
+      note: string;
+    };
+  };
+  metrics?: {
     cost_per_minute_inr: number;
     target_cap_inr: number;
     target_achieved: boolean;
@@ -182,30 +265,37 @@ export interface BenchmarkReport {
   comparison: {
     baseline: {
       name: string;
+      baseline_type?: string;
+      source?: string;
       rendering_location: string;
       cost_per_minute_inr: number;
       time_to_first_frame_ms: number;
       lip_sync_method: string;
-      lip_sync_score: number;
+      lip_sync_score?: number;
       server_gpu_dependency: boolean;
-      scalability_barrier: string;
+      scalability_barrier?: string;
       target_met: boolean;
     };
     optimized: {
       name: string;
+      baseline_type?: string;
+      source?: string;
       rendering_location: string;
       cost_per_minute_inr: number;
-      time_to_first_frame_ms: number;
+      backend_avatar_plan_latency_ms?: number;
+      time_to_first_frame_ms?: number;
       lip_sync_method: string;
-      lip_sync_score: number;
+      viseme_timeline_quality_score?: number;
+      lip_sync_score?: number;
       server_gpu_dependency: boolean;
-      scalability_barrier: string;
+      scalability_barrier?: string;
       target_met: boolean;
     };
-    cost_reduction_percent: number;
-    latency_reduction_percent: number;
+    cost_reduction_percent?: number;
+    latency_reduction_percent?: number;
   };
-  cases: BenchmarkCaseResult[];
+  raw_cases?: BenchmarkCaseResult[];
+  cases?: BenchmarkCaseResult[];
 }
 
 export interface EvaluationDimensionResult {

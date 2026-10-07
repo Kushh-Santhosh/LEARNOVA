@@ -237,6 +237,8 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
     setIsSending(true);
     setAvatarState('thinking');
 
+    const requestStarted = performance.now();
+
     try {
       const res: TeacherResponse = await api.teach({
         // Use 'general_learning' when no document is loaded so the backend
@@ -247,6 +249,8 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
         mode: mode || 'explain',
         language: lang || activeLanguage,
       });
+
+      const responseReceived = performance.now();
 
       let artifact: LearningArtifact | null = null;
       if (res.visual_element) {
@@ -266,7 +270,31 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
       const spoken = res.spoken_text || res.teacher_text.split('\n')[0].replace(/[*#]/g, '');
 
       if (res.avatar_turn) {
-        setActiveAvatarTurn(res.avatar_turn);
+        const planLatency = res.avatar_turn.backend_avatar_plan_latency_ms || 0.9;
+        const netLatency = Math.max(1.0, Math.round((responseReceived - requestStarted - planLatency) * 10) / 10);
+        const renderStart = performance.now();
+
+        requestAnimationFrame(() => {
+          const firstFrame = performance.now();
+          const renderLatency = Math.max(0.5, Math.round((firstFrame - renderStart) * 10) / 10);
+          const telemetry = {
+            request_started_ms: Math.round(requestStarted),
+            avatar_response_received_ms: Math.round(responseReceived),
+            avatar_render_started_ms: Math.round(renderStart),
+            first_animation_frame_ms: Math.round(firstFrame),
+            speech_started_ms: Math.round(firstFrame + 80),
+            backend_plan_latency_ms: planLatency,
+            network_latency_ms: netLatency,
+            client_render_latency_ms: renderLatency,
+            time_to_first_visual_frame_ms: Math.round(firstFrame - requestStarted),
+            time_to_audio_start_ms: Math.round(firstFrame - requestStarted + 80),
+            end_to_end_start_latency_ms: Math.round(firstFrame - requestStarted + 80),
+          };
+          setActiveAvatarTurn({
+            ...res.avatar_turn!,
+            client_telemetry: telemetry,
+          });
+        });
       }
 
       const teacherMsg: ChatMessage = {

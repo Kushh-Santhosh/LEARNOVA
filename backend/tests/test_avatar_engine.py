@@ -88,7 +88,7 @@ def test_avatar_engine_cost_target():
 
 
 def test_avatar_engine_orchestration_modes():
-    """Verify turn orchestration across all 3 modes."""
+    """Verify turn orchestration, timing separation, and failover across modes."""
     # Mode A (Local Nova)
     turn_a = asyncio.run(avatar_engine.orchestrate_turn(
         text="Welcome to LEARNOVA! Let's explore algorithms.",
@@ -97,7 +97,27 @@ def test_avatar_engine_orchestration_modes():
     assert turn_a["render_mode"] == "mode_a_local"
     assert len(turn_a["viseme_timeline"]) > 5
     assert len(turn_a["expression_timeline"]) >= 1
-    assert turn_a["time_to_first_avatar_frame_ms"] < 150.0
+    assert turn_a["backend_avatar_plan_latency_ms"] < 150.0
+    assert turn_a["audio_viseme_alignment"]["measured"] is False
+    assert turn_a["audio_viseme_alignment"]["status"].startswith("Not measured")
+
+    # Mode A with actual audio duration provided
+    turn_audio = asyncio.run(avatar_engine.orchestrate_turn(
+        text="Welcome to LEARNOVA!",
+        mode="mode_a_local",
+        actual_audio_duration_ms=2100
+    ))
+    assert turn_audio["audio_viseme_alignment"]["measured"] is True
+    assert turn_audio["actual_audio_duration_ms"] == 2100
+
+    # Mode B without API key -> real graceful failover to Mode A
+    turn_b = asyncio.run(avatar_engine.orchestrate_turn(
+        text="Testing cloud failover.",
+        mode="mode_b_hq"
+    ))
+    assert turn_b["render_mode"] == "mode_a_local"
+    assert turn_b["failover"] is not None
+    assert turn_b["failover"]["fallback_mode"] == "mode_a_local"
 
     # Mode C (Text Fallback)
     turn_c = asyncio.run(avatar_engine.orchestrate_turn(
@@ -105,15 +125,19 @@ def test_avatar_engine_orchestration_modes():
         mode="mode_c_text"
     ))
     assert turn_c["render_mode"] == "mode_c_text"
-    assert turn_c["duration_ms"] == 0
+    assert turn_c["estimated_duration_ms"] == 0
     assert turn_c["viseme_timeline"] == []
 
 
 def test_avatar_benchmark_suite():
-    """Verify benchmark loads fixtures and runs cleanly."""
+    """Verify benchmark loads fixtures and runs cleanly with honest statistical calculations."""
     res = asyncio.run(avatar_benchmark_service.run_full_benchmark(mode="mode_a_local"))
     assert res["total_cases"] >= 10
     assert res["successful_cases"] == res["total_cases"]
     assert res["failure_count"] == 0
-    assert res["metrics"]["target_achieved"] is True
-    assert res["comparison"]["cost_reduction_percent"] >= 90.0
+    assert "statistics" in res
+    assert res["statistics"]["total_variable_cost_per_minute_inr"]["target_achieved"] is True
+    assert len(res["raw_cases"]) == res["total_cases"]
+    assert res["comparison"]["baseline"]["baseline_type"] == "illustrative_published_rate"
+    assert res["comparison"]["optimized"]["baseline_type"] == "measured_direct_server_performance"
+

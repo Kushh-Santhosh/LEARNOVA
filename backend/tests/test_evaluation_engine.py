@@ -60,6 +60,15 @@ def test_evaluation_consistency_statistics():
     assert "median" in stats
     assert "standard_deviation" in stats
     assert "range" in stats
-    assert stats["standard_deviation"] < 0.25, f"High variance detected: {stats['standard_deviation']}"
-    assert stats["stability_grade"] in ("HIGHLY_STABLE", "STABLE")
+    assert stats["standard_deviation"] == 0.0, f"Expected deterministic zero variance, got: {stats['standard_deviation']}"
+    assert stats["simulated_variance_applied"] is False
     assert len(stats["run_scores"]) == 5
+
+
+def test_unverified_status_when_context_missing():
+    """Verify that when no context is provided, accuracy is marked UNVERIFIED."""
+    eval_result = evaluation_engine.evaluate_response("What is DNS?", "DNS resolves hostnames to IP addresses.")
+    accuracy_data = eval_result["detailed_dimensions"]["accuracy"]
+    assert accuracy_data["verification_status"] == "UNVERIFIED"
+    assert "No reference context document provided" in accuracy_data["evidence"]
+
