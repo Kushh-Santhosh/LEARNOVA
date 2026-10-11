@@ -1,10 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   ScreenContextMode,
   ScreenGuidanceResponse,
-  ScreenCapabilities,
-  WebsiteStatusResponse,
-  WebsiteChatResponse
+  ScreenCapabilities
 } from '../../types';
 import { api } from '../../api';
 import {
@@ -15,7 +13,6 @@ import {
 import { voiceSynthesis } from '../../services/voiceSynthesis';
 import {
   Sparkles,
-  ScreenShare,
   Compass,
   X,
   ChevronRight,
@@ -31,14 +28,15 @@ import {
   VolumeX,
   Send,
   Square,
-  Globe,
   BookOpen,
   MessageSquare,
-  Monitor,
+  Compass as GuideIcon,
   CheckCircle2,
   AlertTriangle,
   Loader2,
-  ExternalLink
+  Lightbulb,
+  ArrowRight,
+  GraduationCap
 } from 'lucide-react';
 
 interface FloatingNovaCompanionProps {
@@ -59,7 +57,10 @@ interface CompanionMessage {
   timestamp: string;
   citations?: Array<{ source?: string; page?: number; section?: string; excerpt?: string }>;
   isError?: boolean;
+  isGrounded?: boolean;
 }
+
+type CompanionState = 'idle' | 'listening' | 'thinking' | 'speaking' | 'guiding' | 'attention';
 
 const STORAGE_KEY = 'learnova_floating_companion_messages';
 
@@ -74,9 +75,9 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
   onStopGuiding,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeSubTab, setActiveSubTab] = useState<'chat' | 'screen' | 'web'>('chat');
+  const [activeSubTab, setActiveSubTab] = useState<'chat' | 'guide' | 'learn'>('chat');
 
-  // --- Chat State (Phase 4) ---
+  // --- Chat State ---
   const [messages, setMessages] = useState<CompanionMessage[]>(() => {
     try {
       const saved = sessionStorage.getItem(STORAGE_KEY);
@@ -86,8 +87,9 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
       {
         id: 'msg_initial',
         sender: 'teacher',
-        text: "Hello! I am Professor Nova. Ask me any conceptual question about your learning document, or switch tabs to guide you visually through the platform.",
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        text: "Hello! I am Professor Nova, your persistent learning companion. Ask me anything about what you are studying, or use Guide Me and Learn to explore your curriculum.",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isGrounded: false
       }
     ];
   });
@@ -98,31 +100,38 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
   const abortControllerRef = useRef<AbortController | null>(null);
   const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
-  // --- Screen Guidance State (Phase 6 & 7) ---
+  // --- Guide Me State ---
   const [screenMode, setScreenMode] = useState<ScreenContextMode>('dom');
-  const [screenQuery, setScreenQuery] = useState('');
-  const [isScreenLoading, setIsScreenLoading] = useState(false);
-  const [screenErrorNotice, setScreenErrorNotice] = useState<string | null>(null);
+  const [guideQuery, setGuideQuery] = useState('');
+  const [isGuideLoading, setIsGuideLoading] = useState(false);
+  const [guideErrorNotice, setGuideErrorNotice] = useState<string | null>(null);
   const [isViewingSharedScreen, setIsViewingSharedScreen] = useState(false);
-  const [isScreenPaused, setIsScreenPaused] = useState(false);
+  const [isGuidePaused, setIsGuidePaused] = useState(false);
 
-  // --- Website Knowledge State (Phase 5) ---
-  const [websiteUrl, setWebsiteUrl] = useState('');
-  const [isIngestingWeb, setIsIngestingWeb] = useState(false);
-  const [webStatus, setWebStatus] = useState<WebsiteStatusResponse | null>(null);
-  const [activeKbId, setActiveKbId] = useState<string | null>(null);
-  const [webQuestion, setWebQuestion] = useState('');
-  const [webAnswer, setWebAnswer] = useState<WebsiteChatResponse | null>(null);
-  const [isQueryingWeb, setIsQueryingWeb] = useState(false);
-  const [webError, setWebError] = useState<string | null>(null);
+  // --- Learn Tab State ---
+  const [isLearnLoading, setIsLearnLoading] = useState(false);
+  const [pageExplanation, setPageExplanation] = useState<string | null>(null);
+  const [learnFollowUps, setLearnFollowUps] = useState<string[]>([]);
+  const [learnError, setLearnError] = useState<string | null>(null);
 
   const panelRef = useRef<HTMLDivElement | null>(null);
 
-  // Save conversation history to sessionStorage
+  // Compute Companion Dynamic State (Section 3: Idle, Listening, Thinking, Speaking, Guiding, Attention)
+  const companionState: CompanionState = useMemo(() => {
+    if (isListening) return 'listening';
+    if (isGenerating || isGuideLoading || isLearnLoading) return 'thinking';
+    if (isSpeaking) return 'speaking';
+    if (isGuidingActive) return 'guiding';
+    if (chatError || guideErrorNotice || learnError) return 'attention';
+    return 'idle';
+  }, [isListening, isGenerating, isGuideLoading, isLearnLoading, isSpeaking, isGuidingActive, chatError, guideErrorNotice, learnError]);
+
+  // Persist messages to sessionStorage
   useEffect(() => {
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
@@ -130,7 +139,7 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Global browser shortcut Cmd+Shift+N / Ctrl+Shift+N
+  // Shortcut Cmd+Shift+N / Ctrl+Shift+N & Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'n') {
@@ -144,7 +153,7 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
-  // Web SpeechRecognition Setup
+  // Speech Recognition Setup
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
@@ -153,11 +162,9 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
       recognition.interimResults = false;
       recognition.lang = 'en-US';
 
-      recognition.onresult = (e: any) => {
-        const transcript = e.results[0][0].transcript;
-        if (transcript) {
-          setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript));
-        }
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        setInputText(transcript);
         setIsListening(false);
       };
 
@@ -167,11 +174,8 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
     }
   }, []);
 
-  const toggleVoiceInput = () => {
-    if (!recognitionRef.current) {
-      setChatError('Speech recognition is not supported in this browser.');
-      return;
-    }
+  const toggleListening = () => {
+    if (!recognitionRef.current) return;
     if (isListening) {
       recognitionRef.current.stop();
       setIsListening(false);
@@ -185,68 +189,96 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
     }
   };
 
-  // Chat Submission
+  // Helper for TTS playback state
+  const speakIfAllowed = (text: string) => {
+    if (isMuted || !text) return;
+    setIsSpeaking(true);
+    voiceSynthesis.speak(text, {
+      lang: 'en',
+      onEnd: () => setIsSpeaking(false),
+      onError: () => setIsSpeaking(false),
+    });
+  };
+
+  // Human-readable active page label
+  const activePageLabel = useMemo(() => {
+    switch (activeTab) {
+      case 'documents': return 'Document Hub';
+      case 'classroom': return 'Classroom & Whiteboard';
+      case 'knowledge': return 'Knowledge Graph';
+      case 'progress': return 'Mastery Ledger & Progress';
+      default: return 'Curriculum Workspace';
+    }
+  }, [activeTab]);
+
+  // --- Handlers: Chat ---
   const handleSendMessage = async (textToSend?: string) => {
-    const msg = (textToSend || inputText).trim();
-    if (!msg || isGenerating) return;
+    const query = (textToSend || inputText).trim();
+    if (!query || isGenerating) return;
 
     setInputText('');
     setChatError(null);
     setLastFailedMessage(null);
+    setIsGenerating(true);
 
     const userMsg: CompanionMessage = {
-      id: `usr_${Date.now()}`,
+      id: `msg_u_${Date.now()}`,
       sender: 'user',
-      text: msg,
+      text: query,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
     setMessages((prev) => [...prev, userMsg]);
-    setIsGenerating(true);
 
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
     try {
-      const res = await api.teach({
-        document_id: activeDocId || 'general_learning',
-        message: msg,
-        active_concept: activeConceptName || activeDocTitle || undefined,
-        mode: 'explain'
+      const docId = activeDocId || 'general_learning';
+      const concept = activeConceptName || activeDocTitle || `${activePageLabel} Context`;
+
+      const response = await api.teach({
+        document_id: docId,
+        message: query,
+        active_concept: concept,
+        mode: 'explain',
+        language: 'en'
       });
 
-      const replyText = res.teacher_text || res.spoken_text || "I've analyzed your question and updated your understanding trajectory.";
+      if (controller.signal.aborted) return;
+
+      const replyText = response.teacher_text || response.spoken_text ||
+        "I have processed your inquiry. Let me know if you would like to explore this concept further.";
+
+      const isDocGrounded = Boolean(activeDocId && response.citations && response.citations.length > 0);
 
       const teacherMsg: CompanionMessage = {
-        id: `teach_${Date.now()}`,
+        id: `msg_t_${Date.now()}`,
         sender: 'teacher',
         text: replyText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        citations: res.citations
+        citations: response.citations,
+        isGrounded: isDocGrounded
       };
 
       setMessages((prev) => [...prev, teacherMsg]);
-
-      // Speech Synthesis if not muted
-      if (!isMuted && (res.spoken_text || replyText)) {
-        voiceSynthesis.speak(res.spoken_text || replyText);
-      }
+      speakIfAllowed(response.spoken_text || replyText);
     } catch (err: any) {
-      if (err.name === 'AbortError') {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: `sys_${Date.now()}`,
-            sender: 'teacher',
-            text: 'Response generation was cancelled.',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-          }
-        ]);
-      } else {
-        const errorText = err.message || 'Failed to reach Professor Nova. Check backend connectivity.';
-        setChatError(errorText);
-        setLastFailedMessage(msg);
-      }
+      if (err.name === 'AbortError') return;
+      const errorMsg = err.message || 'Unable to connect to Nova teacher brain.';
+      setChatError(errorMsg);
+      setLastFailedMessage(query);
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `msg_err_${Date.now()}`,
+          sender: 'teacher',
+          text: `⚠️ ${errorMsg} Please check your connection or retry.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isError: true
+        }
+      ]);
     } finally {
       setIsGenerating(false);
       abortControllerRef.current = null;
@@ -270,19 +302,20 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
       {
         id: 'msg_reset',
         sender: 'teacher',
-        text: "Conversation cleared. I am ready for your next study topic or question.",
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        text: "Conversation reset. I am ready for your next question or learning goal.",
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isGrounded: false
       }
     ]);
     setShowClearConfirm(false);
   };
 
-  // Launch Screen Guidance
-  const handleLaunchScreenQuery = async (queryText: string) => {
-    if (!queryText.trim() || isScreenLoading) return;
+  // --- Handlers: Guide Me ---
+  const handleLaunchGuideQuery = async (queryText: string) => {
+    if (!queryText.trim() || isGuideLoading) return;
 
-    setIsScreenLoading(true);
-    setScreenErrorNotice(null);
+    setIsGuideLoading(true);
+    setGuideErrorNotice(null);
 
     try {
       let imageBase64: string | undefined = undefined;
@@ -293,8 +326,8 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
         const capture = await browserScreenProvider.captureContext(activeTab);
         setIsViewingSharedScreen(false);
         if (capture.error) {
-          setScreenErrorNotice(capture.error);
-          setIsScreenLoading(false);
+          setGuideErrorNotice(capture.error);
+          setIsGuideLoading(false);
           return;
         }
         imageBase64 = capture.screenshot_base64;
@@ -316,82 +349,103 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
       if (res && (res.status?.toLowerCase() === 'success' || !!res.target_element)) {
         onStartWorkflow(res);
         setIsOpen(false);
-        setScreenQuery('');
+        setGuideQuery('');
       } else {
-        setScreenErrorNotice(res.recommended_action?.what || 'I could not find an element for that request.');
+        setGuideErrorNotice(res?.recommended_action?.what || 'I could not find a visible control matching that goal.');
       }
     } catch (err: any) {
-      setScreenErrorNotice(err.message || 'Screen analysis failed.');
+      setGuideErrorNotice(err.message || 'Guidance analysis could not complete.');
     } finally {
-      setIsScreenLoading(false);
+      setIsGuideLoading(false);
     }
   };
 
-  // Website Ingestion (Phase 5)
-  const handleStartWebsiteIngestion = async () => {
-    if (!websiteUrl.trim() || isIngestingWeb) return;
-    setIsIngestingWeb(true);
-    setWebError(null);
+  // --- Handlers: Learn Mode ---
+  const handleExplainCurrentPage = async () => {
+    setIsLearnLoading(true);
+    setLearnError(null);
+
     try {
-      const res = await api.ingestWebsite({ url: websiteUrl, max_pages: 5, max_depth: 2 });
-      setActiveKbId(res.kb_id);
-      setWebStatus({
-        kb_id: res.kb_id,
-        base_url: res.base_url,
-        status: 'completed',
-        pages_crawled: res.pages_crawled,
-        chunk_count: res.chunk_count,
-        crawled_urls: [],
-        errors: res.errors
+      const capture = await webPageProvider.captureContext(activeTab);
+      const visibleLabels = capture.dom_elements
+        .filter((el) => el.label && el.label.length > 2)
+        .slice(0, 10)
+        .map((el) => el.label)
+        .join('; ');
+
+      const prompt = `Explain the educational concepts on the ${activePageLabel} screen (${activeTab}). Visible screen controls: ${visibleLabels}. Explain what the student should focus on here and give 2 clear examples.`;
+
+      const response = await api.teach({
+        document_id: activeDocId || 'general_learning',
+        message: prompt,
+        active_concept: activeConceptName || activeDocTitle || activePageLabel,
+        mode: 'explain',
+        language: 'en'
       });
+
+      const explanation = response.teacher_text || response.spoken_text ||
+        `On the ${activePageLabel}, you can explore structured concepts, review evidentiary progress, and master your syllabus.`;
+
+      setPageExplanation(explanation);
+      setLearnFollowUps([
+        `How does ${activeConceptName || 'this topic'} connect to real-world applications?`,
+        `What are the prerequisite concepts for ${activePageLabel}?`,
+        `Can you test my understanding with a quick comprehension question?`
+      ]);
+
+      speakIfAllowed(response.spoken_text || explanation);
     } catch (err: any) {
-      setWebError(err.message || 'Website crawl error');
+      setLearnError(err.message || 'Could not synthesize page concepts.');
     } finally {
-      setIsIngestingWeb(false);
+      setIsLearnLoading(false);
     }
   };
 
-  const handleAskWebsite = async () => {
-    if (!activeKbId || !webQuestion.trim() || isQueryingWeb) return;
-    setIsQueryingWeb(true);
-    try {
-      const res = await api.chatWebsite({ kb_id: activeKbId, question: webQuestion });
-      setWebAnswer(res);
-    } catch (err: any) {
-      setWebError(err.message || 'Failed to query website knowledge.');
-    } finally {
-      setIsQueryingWeb(false);
+  // Current page suggested guidance quick items
+  const currentScreenTours = useMemo(() => {
+    switch (activeTab) {
+      case 'documents':
+        return [
+          { label: 'Where to upload a study PDF', query: 'Show me where to upload a document' },
+          { label: 'Explore loaded curriculum files', query: 'Point to existing uploaded documents' },
+        ];
+      case 'classroom':
+        return [
+          { label: 'Where to start adaptive lesson', query: 'Show me where to interact with Professor Nova' },
+          { label: 'How to take a comprehension quiz', query: 'Point to the quiz generator button' },
+          { label: 'How to challenge Feynman teach-back', query: 'Point to the teach-back Feynman challenge' },
+        ];
+      case 'knowledge':
+        return [
+          { label: 'Where to inspect prerequisite nodes', query: 'Show me how to explore knowledge graph nodes' },
+        ];
+      case 'progress':
+        return [
+          { label: 'How to read mastery ledger', query: 'Point to evidentiary mastery score' },
+        ];
+      default:
+        return [
+          { label: 'Navigate back to classroom', query: 'Show me the Learn tab navigation' },
+        ];
     }
-  };
-
-  const quickGuides = [
-    { label: 'How do I upload a document?', query: 'How do I upload a study document?' },
-    { label: 'Where is my knowledge graph?', query: 'Show me my knowledge graph' },
-    { label: 'Start a quiz', query: 'Start a quiz on this topic' },
-    { label: 'How does teach-back work?', query: 'How do I do teach-back?' },
-    { label: 'Review my learning progress', query: 'Show me my progress and analytics' },
-  ];
+  }, [activeTab]);
 
   return (
     <>
-      {/* Floating Action Trigger Badge (Bottom Right) */}
-      <div className="fixed bottom-5 right-5 z-40 flex items-center gap-2 select-none">
-        {/* Status indicator: Nova is viewing your shared screen */}
-        {isViewingSharedScreen && (
-          <div className="bg-amber-950/95 text-white backdrop-blur-md px-3.5 py-1.5 rounded-full text-xs flex items-center gap-2 border border-amber-500/50 shadow-lg animate-pulse">
-            <ScreenShare className="w-3.5 h-3.5 text-amber-400" />
-            <span className="font-medium">Nova is viewing your screen</span>
-          </div>
-        )}
-
-        {/* Guiding indicator pill if active */}
+      {/* ─────────────────────────────────────────────────────────────
+          1. LAUNCHER: Small, Fixed Bottom-Right Robot Companion
+          ───────────────────────────────────────────────────────────── */}
+      <div className="fixed bottom-5 right-5 z-40 flex items-center space-x-2 select-none">
+        {/* Guiding Active Mini-Status Pill */}
         {isGuidingActive && (
-          <div className="bg-indigo-950/90 text-white backdrop-blur-md px-3 py-1.5 rounded-full text-xs flex items-center gap-2 border border-indigo-500/40 shadow-lg animate-fadeIn">
-            <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
-            <span className="font-medium truncate max-w-[130px]">{activeWorkflowName || 'Guiding'}</span>
+          <div className="bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-full border border-indigo-200 shadow-lg flex items-center gap-2 text-xs text-indigo-900 animate-pulse">
+            <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping" />
+            <span className="font-semibold text-[11px] truncate max-w-[130px]">
+              {activeWorkflowName || 'Guiding Screen'}
+            </span>
             <button
               onClick={onStopGuiding}
-              className="hover:text-rose-300 transition-colors ml-1 cursor-pointer"
+              className="text-slate-400 hover:text-slate-700 ml-1 cursor-pointer"
               title="Stop guidance"
             >
               <X className="w-3.5 h-3.5" />
@@ -399,21 +453,30 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
           </div>
         )}
 
-        {/* Floating Launcher Button */}
+        {/* Small Floating Robot Launcher */}
         <button
           onClick={() => setIsOpen(!isOpen)}
           aria-expanded={isOpen}
-          aria-label="Professor Nova AI Companion (Cmd+Shift+N)"
-          className={`relative group p-1.5 rounded-full transition-all duration-300 shadow-xl cursor-pointer flex items-center justify-center ${
+          aria-label={`Professor Nova AI Companion (${companionState}) — Shortcut Cmd+Shift+N`}
+          className={`relative group p-1 rounded-full transition-all duration-300 shadow-xl cursor-pointer flex items-center justify-center motion-reduce:transition-none ${
             isOpen
               ? 'bg-indigo-600 ring-4 ring-indigo-200 text-white scale-105'
-              : isGuidingActive
-              ? 'bg-indigo-600 ring-4 ring-indigo-300/60 text-white'
+              : companionState === 'guiding'
+              ? 'bg-indigo-600 ring-4 ring-indigo-300/70 text-white'
+              : companionState === 'listening'
+              ? 'bg-emerald-600 ring-4 ring-emerald-300/70 text-white'
+              : companionState === 'thinking'
+              ? 'bg-amber-600 ring-4 ring-amber-300/70 text-white'
+              : companionState === 'speaking'
+              ? 'bg-indigo-500 ring-4 ring-indigo-200 text-white'
+              : companionState === 'attention'
+              ? 'bg-rose-500 ring-4 ring-rose-200 text-white'
               : 'bg-white hover:bg-slate-50 border border-slate-200/90 text-slate-800 hover:scale-105'
           }`}
-          title="Professor Nova AI Companion (Cmd+Shift+N)"
+          title={`Professor Nova • ${companionState.toUpperCase()} (Cmd+Shift+N)`}
         >
-          <div className="relative w-11 h-11 rounded-full overflow-hidden flex items-center justify-center bg-slate-900">
+          {/* Avatar Icon */}
+          <div className="relative w-12 h-12 rounded-full overflow-hidden flex items-center justify-center bg-slate-900 border border-white/20">
             <img
               src="/professor_nova.png"
               alt="Professor Nova"
@@ -421,25 +484,56 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
             />
           </div>
 
+          {/* Dynamic State Ring & Dot Indicator */}
           <span className="absolute top-0 right-0 flex h-3.5 w-3.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-indigo-500 border-2 border-white" />
+            {companionState === 'listening' && (
+              <>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75 motion-reduce:hidden" />
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500 border-2 border-white" />
+              </>
+            )}
+            {companionState === 'thinking' && (
+              <>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75 motion-reduce:hidden" />
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-amber-500 border-2 border-white" />
+              </>
+            )}
+            {companionState === 'speaking' && (
+              <>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75 motion-reduce:hidden" />
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-indigo-500 border-2 border-white" />
+              </>
+            )}
+            {companionState === 'guiding' && (
+              <>
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75 motion-reduce:hidden" />
+                <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-indigo-600 border-2 border-white" />
+              </>
+            )}
+            {companionState === 'attention' && (
+              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-rose-500 border-2 border-white" />
+            )}
+            {companionState === 'idle' && (
+              <span className="relative inline-flex rounded-full h-3.5 w-3.5 bg-indigo-500 border-2 border-white" />
+            )}
           </span>
         </button>
       </div>
 
-      {/* Floating Interactive Companion Modal Drawer */}
+      {/* ─────────────────────────────────────────────────────────────
+          2. COMPANION PANEL: Polished, Responsive AI Companion Panel
+          ───────────────────────────────────────────────────────────── */}
       {isOpen && (
         <div
           ref={panelRef}
           role="dialog"
           aria-label="Professor Nova AI Companion"
-          className="fixed bottom-20 right-5 z-40 w-[420px] max-w-[calc(100vw-2.5rem)] h-[560px] max-h-[calc(100vh-6.5rem)] bg-white/95 backdrop-blur-2xl border border-slate-200/90 shadow-2xl rounded-3xl flex flex-col text-slate-800 transition-all select-none animate-fadeIn overflow-hidden"
+          className="fixed bottom-20 right-5 z-40 w-[420px] max-w-[calc(100vw-2.5rem)] h-[580px] max-h-[calc(100vh-6.5rem)] bg-white/95 backdrop-blur-2xl border border-slate-200/90 shadow-2xl rounded-3xl flex flex-col text-slate-800 transition-all select-none animate-fadeIn overflow-hidden"
         >
           {/* Header */}
           <div className="p-3.5 border-b border-slate-100 flex items-center justify-between shrink-0 bg-slate-50/70">
             <div className="flex items-center space-x-2.5">
-              <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-200 shadow-2xs shrink-0">
+              <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-200 shadow-2xs shrink-0 bg-slate-900">
                 <img
                   src="/professor_nova.png"
                   alt="Professor Nova"
@@ -449,12 +543,20 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
               <div className="truncate">
                 <h3 className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
                   <span>Professor Nova</span>
-                  <span className="text-[9px] font-mono font-medium px-1.5 py-0.2 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100">
-                    Companion
+                  <span className={`text-[9px] font-mono font-medium px-1.5 py-0.2 rounded-full border ${
+                    companionState === 'guiding'
+                      ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                      : companionState === 'listening'
+                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      : companionState === 'thinking'
+                      ? 'bg-amber-50 text-amber-700 border-amber-200'
+                      : 'bg-slate-100 text-slate-600 border-slate-200'
+                  }`}>
+                    {companionState.toUpperCase()}
                   </span>
                 </h3>
                 <p className="text-[10px] text-slate-500 font-normal truncate">
-                  {activeDocTitle ? `Grounded: ${activeDocTitle}` : 'General Adaptive AI Learning'}
+                  {activeDocTitle ? `Grounded: ${activeDocTitle}` : `Page: ${activePageLabel}`}
                 </p>
               </div>
             </div>
@@ -477,7 +579,7 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
             </div>
           </div>
 
-          {/* Sub-Tab Navigation Switcher */}
+          {/* Sub-Tab Navigation Switcher (CHAT / GUIDE ME / LEARN) */}
           <div className="px-3 pt-2.5 shrink-0 bg-slate-50/40">
             <div className="flex items-center p-1 bg-slate-100/90 rounded-xl text-xs font-medium">
               <button
@@ -492,74 +594,88 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
                 <span>Chat</span>
               </button>
               <button
-                onClick={() => setActiveSubTab('screen')}
+                onClick={() => setActiveSubTab('guide')}
                 className={`flex-1 py-1 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                  activeSubTab === 'screen'
+                  activeSubTab === 'guide'
                     ? 'bg-white text-slate-900 shadow-2xs font-semibold'
                     : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
-                <Monitor className="w-3.5 h-3.5" />
-                <span>Screen Guide</span>
+                <GuideIcon className="w-3.5 h-3.5" />
+                <span>Guide Me</span>
               </button>
               <button
-                onClick={() => setActiveSubTab('web')}
+                onClick={() => setActiveSubTab('learn')}
                 className={`flex-1 py-1 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
-                  activeSubTab === 'web'
+                  activeSubTab === 'learn'
                     ? 'bg-white text-slate-900 shadow-2xs font-semibold'
                     : 'text-slate-500 hover:text-slate-900'
                 }`}
               >
-                <Globe className="w-3.5 h-3.5" />
-                <span>Website</span>
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Learn</span>
               </button>
             </div>
           </div>
 
-          {/* TAB 1: Chat View (Phase 4) */}
+          {/* ─────────────────────────────────────────────────────────
+              TAB 1: CHAT
+              ───────────────────────────────────────────────────────── */}
           {activeSubTab === 'chat' && (
-            <div className="flex-1 flex flex-col min-h-0">
-              {/* Grounding Context Banner */}
-              <div className="px-3.5 py-1.5 bg-indigo-50/60 border-b border-indigo-100/60 text-[10px] text-indigo-900 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-1.5 truncate">
-                  <BookOpen className="w-3 h-3 text-indigo-600 shrink-0" />
-                  <span className="truncate">
-                    {activeDocTitle ? `Document: ${activeDocTitle}` : 'General learning (ask any subject)'}
-                  </span>
+            <div className="flex-1 flex flex-col min-h-0 bg-white">
+              {/* Context Bar */}
+              <div className="px-3 py-1.5 border-b border-slate-100 flex items-center justify-between text-[11px] bg-slate-50/50">
+                <div className="flex items-center gap-1.5 text-slate-500 truncate max-w-[280px]">
+                  {activeDocTitle ? (
+                    <span className="inline-flex items-center gap-1 font-medium text-indigo-700 bg-indigo-50/80 px-2 py-0.5 rounded-md border border-indigo-100 truncate">
+                      <BookOpen className="w-3 h-3 shrink-0" />
+                      <span className="truncate">{activeDocTitle}</span>
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 font-medium text-slate-600 bg-slate-100 px-2 py-0.5 rounded-md">
+                      <span>🌐</span>
+                      <span>{activePageLabel}</span>
+                    </span>
+                  )}
                 </div>
+
                 <button
                   onClick={() => setShowClearConfirm(true)}
-                  className="text-slate-400 hover:text-rose-600 transition-colors p-0.5 ml-1 shrink-0 cursor-pointer"
+                  className="text-slate-400 hover:text-rose-600 p-1 rounded-md transition-colors cursor-pointer"
                   title="Clear conversation"
                 >
-                  <Trash2 className="w-3 h-3" />
+                  <Trash2 className="w-3.5 h-3.5" />
                 </button>
               </div>
 
-              {/* Message History List */}
-              <div className="flex-1 overflow-y-auto p-3.5 space-y-3 min-h-0 text-xs">
+              {/* Message Feed */}
+              <div className="flex-1 overflow-y-auto p-3.5 space-y-3 min-h-0">
                 {messages.map((m) => (
                   <div
                     key={m.id}
                     className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}
                   >
                     <div
-                      className={`max-w-[85%] rounded-2xl px-3 py-2 text-xs leading-relaxed ${
+                      className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
                         m.sender === 'user'
                           ? 'bg-indigo-600 text-white rounded-br-xs'
-                          : 'bg-slate-100 text-slate-800 rounded-bl-xs border border-slate-200/60'
+                          : m.isError
+                          ? 'bg-rose-50 text-rose-900 border border-rose-200 rounded-bl-xs'
+                          : 'bg-slate-100 text-slate-900 rounded-bl-xs'
                       }`}
                     >
-                      <p className="whitespace-pre-wrap">{m.text}</p>
+                      <div className="whitespace-pre-wrap">{m.text}</div>
 
-                      {/* Citations block if present */}
+                      {/* Verifiable Citations */}
                       {m.citations && m.citations.length > 0 && (
-                        <div className="mt-2 pt-1.5 border-t border-slate-200/80 space-y-1 text-[10px] text-slate-600">
-                          <span className="font-semibold block text-indigo-700">Verified Sources:</span>
+                        <div className="mt-2 pt-2 border-t border-slate-200/60 text-[10px] space-y-1">
+                          <span className="font-semibold text-indigo-700 block">Verified Document Evidence:</span>
                           {m.citations.map((c, i) => (
-                            <div key={i} className="bg-white/80 p-1.5 rounded-lg border border-slate-200/40">
-                              <span className="font-medium text-slate-800">{c.source || 'Curriculum'} — Page {c.page || 1}</span>
-                              {c.excerpt && <p className="italic text-slate-500 mt-0.5 line-clamp-2">"{c.excerpt}"</p>}
+                            <div key={i} className="bg-white/80 p-1.5 rounded-md border border-slate-200 text-slate-700">
+                              <span className="font-medium text-slate-900">
+                                {c.section || c.source} {c.page ? `(Page ${c.page})` : ''}
+                              </span>
+                              {c.excerpt && <p className="text-slate-500 italic mt-0.5 line-clamp-2">"{c.excerpt}"</p>}
                             </div>
                           ))}
                         </div>
@@ -569,60 +685,47 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
                   </div>
                 ))}
 
+                {/* Thinking / In-Flight Indicator */}
                 {isGenerating && (
-                  <div className="flex items-center gap-2 text-xs text-slate-500 p-2 bg-slate-50 rounded-xl border border-slate-100">
+                  <div className="flex items-center space-x-2 text-xs text-slate-500 bg-slate-50 p-2 rounded-xl border border-slate-100 w-fit">
                     <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
                     <span>Professor Nova is thinking...</span>
                     <button
                       onClick={handleStopGeneration}
-                      className="ml-auto flex items-center gap-1 text-[10px] text-rose-600 font-medium hover:text-rose-800 bg-rose-50 px-2 py-0.5 rounded-md border border-rose-200 cursor-pointer"
+                      className="ml-2 text-[10px] px-2 py-0.5 bg-rose-50 text-rose-700 hover:bg-rose-100 rounded-md font-medium flex items-center gap-1 cursor-pointer"
                     >
-                      <Square className="w-2.5 h-2.5 fill-rose-600" />
+                      <Square className="w-2.5 h-2.5" />
                       <span>Stop</span>
                     </button>
                   </div>
                 )}
 
-                {chatError && (
-                  <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-900 rounded-xl space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-xs font-semibold">
-                      <AlertTriangle className="w-3.5 h-3.5 text-rose-600" />
-                      <span>Generation failed</span>
-                    </div>
-                    <p className="text-[11px] text-rose-700">{chatError}</p>
-                    {lastFailedMessage && (
-                      <button
-                        onClick={handleRetry}
-                        className="flex items-center gap-1 text-[10px] font-medium text-rose-800 bg-rose-100 hover:bg-rose-200 px-2 py-1 rounded-lg transition-colors cursor-pointer"
-                      >
-                        <RotateCcw className="w-3 h-3" />
-                        <span>Retry response</span>
-                      </button>
-                    )}
+                {/* Retry prompt on error */}
+                {chatError && !isGenerating && (
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs">
+                    <span>Message generation failed.</span>
+                    <button
+                      onClick={handleRetry}
+                      className="flex items-center gap-1 px-2.5 py-1 bg-amber-600 text-white rounded-lg text-[11px] font-medium hover:bg-amber-700 transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Retry</span>
+                    </button>
                   </div>
                 )}
 
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Chat Input Bar */}
-              <div className="p-3 border-t border-slate-100 bg-slate-50/50 shrink-0">
-                <form
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }}
-                  className="flex items-center gap-1.5"
-                >
+              {/* Input Area */}
+              <div className="p-3 border-t border-slate-100 bg-slate-50/60 shrink-0">
+                <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-2xl p-1.5 focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
                   <button
-                    type="button"
-                    onClick={toggleVoiceInput}
-                    className={`p-2 rounded-xl transition-colors cursor-pointer shrink-0 ${
-                      isListening
-                        ? 'bg-rose-500 text-white animate-pulse'
-                        : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
+                    onClick={toggleListening}
+                    className={`p-1.5 rounded-xl transition-colors cursor-pointer ${
+                      isListening ? 'bg-rose-600 text-white animate-pulse' : 'text-slate-400 hover:text-slate-700 hover:bg-slate-100'
                     }`}
-                    title={isListening ? 'Stop listening' : 'Speak your question'}
+                    title={isListening ? 'Stop recording voice' : 'Voice input (Web Speech)'}
                   >
                     {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                   </button>
@@ -631,94 +734,146 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
                     type="text"
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    placeholder="Ask Professor Nova anything..."
-                    className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:border-indigo-500 focus:outline-none transition-all placeholder:text-slate-400"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSendMessage();
+                    }}
+                    placeholder={
+                      isListening
+                        ? 'Listening to your voice...'
+                        : activeDocTitle
+                        ? `Ask about ${activeDocTitle.slice(0, 24)}...`
+                        : 'Ask Professor Nova any concept...'
+                    }
+                    disabled={isGenerating}
+                    className="flex-1 text-xs bg-transparent border-none outline-none text-slate-800 placeholder-slate-400 px-1"
                   />
 
-                  <button
-                    type="submit"
-                    disabled={!inputText.trim() || isGenerating}
-                    className="p-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 disabled:opacity-40 transition-colors cursor-pointer shrink-0"
-                    title="Send message"
-                  >
-                    <Send className="w-4 h-4" />
-                  </button>
-                </form>
+                  {isGenerating ? (
+                    <button
+                      onClick={handleStopGeneration}
+                      className="p-1.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 transition-colors cursor-pointer"
+                      title="Stop response"
+                    >
+                      <Square className="w-3.5 h-3.5" />
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleSendMessage()}
+                      disabled={!inputText.trim()}
+                      className="p-1.5 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-40 disabled:hover:bg-indigo-600 transition-colors cursor-pointer"
+                      title="Send message"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}
 
-          {/* TAB 2: Screen Guide View (Phase 6 & 7) */}
-          {activeSubTab === 'screen' && (
+          {/* ─────────────────────────────────────────────────────────
+              TAB 2: GUIDE ME
+              ───────────────────────────────────────────────────────── */}
+          {activeSubTab === 'guide' && (
             <div className="flex-1 overflow-y-auto p-3.5 space-y-3 min-h-0 text-xs">
-              {/* Screen Mode Toggle */}
-              <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
+              {/* Educational Screen Awareness Banner */}
+              <div className="bg-indigo-50/70 p-3 rounded-2xl border border-indigo-100 space-y-1">
+                <div className="flex items-center gap-1.5 font-semibold text-indigo-900 text-xs">
+                  <Compass className="w-3.5 h-3.5 text-indigo-600" />
+                  <span>Visual Interaction Guide</span>
+                </div>
+                <p className="text-[11px] text-indigo-950/80 leading-relaxed">
+                  Nova highlights exact buttons and controls on <strong>{activePageLabel}</strong> to guide your learning without taking over your actions.
+                </p>
+              </div>
+
+              {/* Mode Toggle (DOM vs Screen Share) */}
+              <div className="flex items-center gap-2 p-1 bg-slate-100 rounded-xl">
                 <button
                   onClick={() => setScreenMode('dom')}
-                  className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                  className={`flex-1 py-1 px-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     screenMode === 'dom' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-500'
                   }`}
                 >
-                  <Monitor className="w-3.5 h-3.5" />
-                  <span>LEARNOVA DOM</span>
+                  DOM Guidance (Active)
                 </button>
                 <button
                   onClick={() => setScreenMode('browser_screen')}
-                  className={`flex-1 py-1.5 px-2 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
+                  className={`flex-1 py-1 px-2 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
                     screenMode === 'browser_screen' ? 'bg-white text-slate-900 shadow-2xs font-semibold' : 'text-slate-500'
                   }`}
                 >
-                  <ScreenShare className="w-3.5 h-3.5" />
-                  <span>Screen Share</span>
+                  Screen Share Mode
                 </button>
               </div>
 
-              {/* Privacy Notice */}
-              <div className="px-2.5 py-1.5 bg-slate-50 rounded-xl border border-slate-100 text-[10px] text-slate-500 flex items-center gap-1.5">
-                <Shield className="w-3 h-3 text-emerald-600 shrink-0" />
-                <span>Zero screenshots stored. Transient memory analysis only.</span>
-              </div>
-
-              {screenErrorNotice && (
-                <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-                  <div className="flex-1 text-[11px] leading-relaxed">{screenErrorNotice}</div>
+              {isViewingSharedScreen && (
+                <div className="p-2.5 bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl flex items-center justify-between">
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
+                    Screen Sharing Active
+                  </span>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setIsGuidePaused(!isGuidePaused)}
+                      className="px-2 py-0.5 bg-white border border-amber-200 rounded text-[11px] hover:bg-amber-100 cursor-pointer"
+                    >
+                      {isGuidePaused ? 'Resume' : 'Pause'}
+                    </button>
+                    <button
+                      onClick={() => setIsViewingSharedScreen(false)}
+                      className="px-2 py-0.5 bg-rose-600 text-white rounded text-[11px] hover:bg-rose-700 cursor-pointer"
+                    >
+                      Disconnect
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {/* Guided Query Input */}
-              <div className="relative">
-                <input
-                  type="text"
-                  value={screenQuery}
-                  onChange={(e) => setScreenQuery(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleLaunchScreenQuery(screenQuery);
-                  }}
-                  placeholder="Where would you like to go?"
-                  className="w-full pl-3 pr-9 py-2 rounded-xl text-xs bg-slate-50 border border-slate-200 focus:bg-white focus:border-indigo-500 focus:outline-none transition-all placeholder:text-slate-400"
-                />
-                <button
-                  onClick={() => handleLaunchScreenQuery(screenQuery)}
-                  disabled={!screenQuery.trim() || isScreenLoading}
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-30 transition-colors cursor-pointer"
-                  title="Start Guidance"
-                >
-                  <ChevronRight className="w-3.5 h-3.5" />
-                </button>
+              {/* Custom Guidance Search Input */}
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-1">
+                  Ask Where To Go
+                </label>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    value={guideQuery}
+                    onChange={(e) => setGuideQuery(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleLaunchGuideQuery(guideQuery);
+                    }}
+                    placeholder="e.g. Show me where to upload..."
+                    className="flex-1 px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:border-indigo-500 focus:outline-none"
+                  />
+                  <button
+                    onClick={() => handleLaunchGuideQuery(guideQuery)}
+                    disabled={!guideQuery.trim() || isGuideLoading}
+                    className="px-3 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-40 text-xs font-medium transition-colors cursor-pointer shrink-0"
+                  >
+                    {isGuideLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Spotlight'}
+                  </button>
+                </div>
               </div>
 
-              {/* Quick Guides List */}
-              <div className="space-y-1.5">
-                <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider block px-1">
-                  Guided Workflows
+              {guideErrorNotice && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-900 text-xs rounded-xl flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0 mt-0.5" />
+                  <span>{guideErrorNotice}</span>
+                </div>
+              )}
+
+              {/* Quick Visual Tours For Current Screen */}
+              <div className="space-y-1 pt-1">
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-1 block">
+                  Recommended On This Page
                 </span>
                 <div className="space-y-1">
-                  {quickGuides.map((item, idx) => (
+                  {currentScreenTours.map((item, idx) => (
                     <button
                       key={idx}
-                      onClick={() => handleLaunchScreenQuery(item.query)}
-                      disabled={isScreenLoading}
+                      onClick={() => handleLaunchGuideQuery(item.query)}
+                      disabled={isGuideLoading}
                       className="w-full text-left px-2.5 py-2 rounded-xl text-xs font-medium text-slate-700 hover:text-slate-950 hover:bg-slate-100 flex items-center justify-between group transition-colors cursor-pointer border border-transparent hover:border-slate-200"
                     >
                       <div className="flex items-center gap-2 truncate">
@@ -733,108 +888,121 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
             </div>
           )}
 
-          {/* TAB 3: Website Knowledge View (Phase 5) */}
-          {activeSubTab === 'web' && (
-            <div className="flex-1 overflow-y-auto p-3.5 space-y-3 min-h-0 text-xs">
-              <div className="bg-indigo-50/70 p-2.5 rounded-xl border border-indigo-100 text-[11px] text-indigo-900 leading-relaxed">
-                <span className="font-semibold block mb-0.5">Aparsoft-Inspired Website Knowledge</span>
-                Enter any documentation or website URL. Nova will crawl safe same-origin pages and answer your questions directly from the indexed sources.
-              </div>
-
-              {/* URL Input */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-1">
-                  Website URL
-                </label>
-                <div className="flex items-center gap-1.5">
-                  <input
-                    type="text"
-                    value={websiteUrl}
-                    onChange={(e) => setWebsiteUrl(e.target.value)}
-                    placeholder="https://docs.python.org/3/tutorial/"
-                    className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:border-indigo-500 focus:outline-none"
-                  />
-                  <button
-                    onClick={handleStartWebsiteIngestion}
-                    disabled={!websiteUrl.trim() || isIngestingWeb}
-                    className="px-3 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 text-xs font-medium transition-colors cursor-pointer shrink-0"
-                  >
-                    {isIngestingWeb ? 'Crawling...' : 'Index'}
-                  </button>
+          {/* ─────────────────────────────────────────────────────────
+              TAB 3: LEARN (Pedagogical Understanding & Grounding)
+              ───────────────────────────────────────────────────────── */}
+          {activeSubTab === 'learn' && (
+            <div className="flex-1 overflow-y-auto p-3.5 space-y-3.5 min-h-0 text-xs">
+              {/* Concept Synthesis Card */}
+              <div className="p-3.5 bg-gradient-to-br from-indigo-50/90 to-purple-50/70 border border-indigo-100/80 rounded-2xl space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 font-semibold text-indigo-950 text-xs">
+                    <GraduationCap className="w-4 h-4 text-indigo-600" />
+                    <span>Current Screen Concepts</span>
+                  </div>
+                  <span className="text-[9px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                    {activePageLabel}
+                  </span>
                 </div>
+
+                <p className="text-[11px] text-slate-600 leading-relaxed">
+                  Nova observes the concepts active on your screen and explains them in simple, pedagogical terms.
+                </p>
+
+                <button
+                  onClick={handleExplainCurrentPage}
+                  disabled={isLearnLoading}
+                  className="w-full py-2 px-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 disabled:opacity-50 text-xs font-medium flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-xs"
+                >
+                  {isLearnLoading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Synthesizing Screen Concepts...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Explain This Page Concepts</span>
+                    </>
+                  )}
+                </button>
               </div>
 
-              {webError && (
-                <div className="p-2 bg-rose-50 border border-rose-200 text-rose-900 text-xs rounded-xl">
-                  {webError}
+              {learnError && (
+                <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-900 text-xs rounded-xl">
+                  {learnError}
                 </div>
               )}
 
-              {/* Crawl Status Card */}
-              {webStatus && (
-                <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-950 rounded-xl space-y-1">
-                  <div className="flex items-center gap-1.5 font-semibold text-xs text-emerald-900">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Website Indexed Successfully</span>
+              {/* Page Explanation Result */}
+              {pageExplanation && (
+                <div className="p-3.5 bg-white border border-slate-200 rounded-2xl space-y-2.5 shadow-2xs animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-slate-900 text-xs flex items-center gap-1.5">
+                      <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Conceptual Breakdown</span>
+                    </span>
+                    <span className="text-[9px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                      Simple Language
+                    </span>
                   </div>
-                  <p className="text-[11px]">
-                    Indexed <strong>{webStatus.pages_crawled}</strong> pages ({webStatus.chunk_count} concept chunks).
+
+                  <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-wrap">
+                    {pageExplanation}
                   </p>
-                </div>
-              )}
 
-              {/* Question Input on Crawled Website */}
-              {activeKbId && (
-                <div className="space-y-2 pt-2 border-t border-slate-100">
-                  <label className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider px-1">
-                    Ask About This Website
-                  </label>
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      type="text"
-                      value={webQuestion}
-                      onChange={(e) => setWebQuestion(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleAskWebsite();
-                      }}
-                      placeholder="e.g. How does authentication work?"
-                      className="flex-1 px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:border-indigo-500 focus:outline-none"
-                    />
-                    <button
-                      onClick={handleAskWebsite}
-                      disabled={!webQuestion.trim() || isQueryingWeb}
-                      className="p-2 bg-slate-900 text-white rounded-xl hover:bg-slate-800 disabled:opacity-40 transition-colors cursor-pointer"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-
-                  {webAnswer && (
-                    <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                      <p className="text-xs text-slate-800 whitespace-pre-wrap leading-relaxed">{webAnswer.answer}</p>
-                      {webAnswer.citations && webAnswer.citations.length > 0 && (
-                        <div className="pt-2 border-t border-slate-200/80 space-y-1 text-[10px]">
-                          <span className="font-semibold text-indigo-700 block">Verified Website Sources:</span>
-                          {webAnswer.citations.map((c, i) => (
-                            <div key={i} className="bg-white p-1.5 rounded-lg border border-slate-200">
-                              <a
-                                href={c.url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="font-medium text-indigo-600 hover:underline flex items-center gap-1"
-                              >
-                                <span>{c.title}</span>
-                                <ExternalLink className="w-2.5 h-2.5" />
-                              </a>
-                              <p className="text-slate-500 mt-0.5 line-clamp-2">{c.excerpt}</p>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                  {/* Follow-Up Comprehension Prompts */}
+                  {learnFollowUps.length > 0 && (
+                    <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                      <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
+                        Test Your Understanding:
+                      </span>
+                      {learnFollowUps.map((q, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => {
+                            setActiveSubTab('chat');
+                            handleSendMessage(q);
+                          }}
+                          className="w-full text-left p-2 rounded-xl bg-slate-50 hover:bg-indigo-50 border border-slate-200/80 hover:border-indigo-200 text-[11px] text-slate-700 hover:text-indigo-900 flex items-center justify-between group transition-colors cursor-pointer"
+                        >
+                          <span className="truncate pr-2">{q}</span>
+                          <ArrowRight className="w-3 h-3 text-slate-400 group-hover:text-indigo-600 shrink-0" />
+                        </button>
+                      ))}
                     </div>
                   )}
                 </div>
               )}
+
+              {/* Active Curriculum Connection Card */}
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-2xl space-y-1.5">
+                <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider block">
+                  Active Document Grounding
+                </span>
+                {activeDocTitle ? (
+                  <div className="text-xs text-slate-800 space-y-1">
+                    <div className="flex items-center gap-1.5 font-medium text-indigo-700">
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>{activeDocTitle}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      Questions asked in Chat return verifiable citations from this curriculum material.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-[11px] text-slate-500 space-y-1">
+                    <p>No document selected. Learning is currently anchored to general computer science and platform navigation.</p>
+                    <button
+                      onClick={() => handleLaunchGuideQuery('Show me where to upload a document')}
+                      className="text-xs font-semibold text-indigo-600 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Upload study document</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -845,9 +1013,9 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
                 <Trash2 className="w-5 h-5" />
               </div>
               <div>
-                <h4 className="text-xs font-semibold text-slate-900">Clear conversation history?</h4>
+                <h4 className="text-xs font-semibold text-slate-900">Reset conversation?</h4>
                 <p className="text-[11px] text-slate-500 mt-1 max-w-[240px]">
-                  This will reset your floating companion message history on this device.
+                  This resets the floating companion message history on this session.
                 </p>
               </div>
               <div className="flex items-center gap-2 pt-1">
@@ -861,15 +1029,15 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
                   onClick={handleClearHistory}
                   className="px-3 py-1.5 rounded-xl text-xs font-medium bg-rose-600 hover:bg-rose-700 text-white cursor-pointer"
                 >
-                  Confirm Clear
+                  Confirm Reset
                 </button>
               </div>
             </div>
           )}
 
-          {/* Footer Shortcut hint */}
+          {/* Footer Shortcut Hint */}
           <div className="p-2.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-400 bg-slate-50/70 shrink-0">
-            <span>Shortcut to toggle</span>
+            <span>Toggle companion</span>
             <kbd className="px-1.5 py-0.5 rounded bg-white text-slate-600 font-mono text-[9px] border border-slate-200">
               Cmd+Shift+N
             </kbd>

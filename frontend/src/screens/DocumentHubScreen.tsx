@@ -136,7 +136,7 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
           }`}
         >
           <Globe className="w-4 h-4" />
-          <span>Index Website (Aparsoft Chatbot)</span>
+          <span>Import Web Documentation</span>
         </button>
       </div>
 
@@ -196,7 +196,7 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
         </div>
       )}
 
-      {/* Mode B: Aparsoft-Inspired Website Knowledge Ingestion Area */}
+      {/* Mode B: Web Documentation Knowledge Ingestion Area */}
       {ingestMode === 'website' && (
         <div className="mb-8 p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm space-y-4 animate-fadeIn">
           <div className="flex items-start justify-between">

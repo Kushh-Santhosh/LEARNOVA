@@ -1,5 +1,5 @@
 """
-LEARNOVA Aparsoft-Inspired Website Knowledge Service
+LEARNOVA Website Knowledge & Curriculum Service
 Enables Professor Nova to safely crawl, index, and answer questions
 grounded in permitted website content with verifiable citations.
 
@@ -226,7 +226,7 @@ class WebsiteKnowledgeBase:
 
 class WebsiteKnowledgeService:
     """
-    Complete Aparsoft-inspired website crawling and QA orchestration service.
+    Website crawling, indexing, and pedagogical citation orchestration service.
     """
     def __init__(self):
         self._stores: Dict[str, WebsiteKnowledgeBase] = {}

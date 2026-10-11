@@ -1,7 +1,7 @@
 -- ====================================================================
 -- LEARNOVA Database Schema & Row-Level Security (RLS) Migrations
 -- Phase 8: Supabase Integration & Multi-Entity Persistence
--- Safe, additive migration.
+-- Safe, idempotent, additive migration.
 -- ====================================================================
 
 -- 1. Users Profile
@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS public.users (
 
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can view and manage their own profile" ON public.users;
 CREATE POLICY "Users can view and manage their own profile"
     ON public.users
     FOR ALL
@@ -42,6 +43,7 @@ CREATE TABLE IF NOT EXISTS public.learning_documents (
 
 ALTER TABLE public.learning_documents ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can access their own learning documents or public demo" ON public.learning_documents;
 CREATE POLICY "Users can access their own learning documents or public demo"
     ON public.learning_documents
     FOR ALL
@@ -61,6 +63,7 @@ CREATE TABLE IF NOT EXISTS public.conversations (
 
 ALTER TABLE public.conversations ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can manage their own conversations" ON public.conversations;
 CREATE POLICY "Users can manage their own conversations"
     ON public.conversations
     FOR ALL
@@ -72,9 +75,9 @@ CREATE POLICY "Users can manage their own conversations"
 CREATE TABLE IF NOT EXISTS public.messages (
     id TEXT PRIMARY KEY,
     conversation_id TEXT REFERENCES public.conversations(id) ON DELETE CASCADE,
-    sender TEXT NOT NULL CHECK (sender IN ('student', 'teacher', 'system')),
+    sender TEXT NOT NULL, -- 'user' or 'teacher'
     content TEXT NOT NULL,
-    spoken_text TEXT,
+    citations JSONB DEFAULT '[]'::JSONB,
     intent TEXT,
     pedagogical_phase TEXT,
     created_at TIMESTAMPTZ DEFAULT TIMEZONE('utc', NOW())
@@ -82,6 +85,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
 
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can access messages for their conversations" ON public.messages;
 CREATE POLICY "Users can access messages for their conversations"
     ON public.messages
     FOR ALL
@@ -93,10 +97,11 @@ CREATE POLICY "Users can access messages for their conversations"
     );
 
 
--- 5. Learner Progress & Concept Mastery
+-- 5. Learner Progress (Evidentiary Mastery Ledger)
 CREATE TABLE IF NOT EXISTS public.learner_progress (
-    id TEXT PRIMARY KEY DEFAULT gen_random_uuid()::text,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    concept_id TEXT NOT NULL,
     concept_name TEXT NOT NULL,
     mastery_score FLOAT DEFAULT 0.0,
     review_count INT DEFAULT 0,
@@ -106,6 +111,7 @@ CREATE TABLE IF NOT EXISTS public.learner_progress (
 
 ALTER TABLE public.learner_progress ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can manage their own progress records" ON public.learner_progress;
 CREATE POLICY "Users can manage their own progress records"
     ON public.learner_progress
     FOR ALL
@@ -113,7 +119,7 @@ CREATE POLICY "Users can manage their own progress records"
     WITH CHECK (auth.uid() = user_id);
 
 
--- 6. Website Knowledge Bases (Aparsoft-Inspired)
+-- 6. Website Knowledge Bases
 CREATE TABLE IF NOT EXISTS public.website_knowledge_bases (
     id TEXT PRIMARY KEY,
     user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
@@ -127,6 +133,7 @@ CREATE TABLE IF NOT EXISTS public.website_knowledge_bases (
 
 ALTER TABLE public.website_knowledge_bases ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can access their own website knowledge bases" ON public.website_knowledge_bases;
 CREATE POLICY "Users can access their own website knowledge bases"
     ON public.website_knowledge_bases
     FOR ALL
@@ -147,6 +154,7 @@ CREATE TABLE IF NOT EXISTS public.website_pages (
 
 ALTER TABLE public.website_pages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can access pages from their website knowledge bases" ON public.website_pages;
 CREATE POLICY "Users can access pages from their website knowledge bases"
     ON public.website_pages
     FOR ALL
@@ -170,8 +178,16 @@ CREATE TABLE IF NOT EXISTS public.screen_guidance_sessions (
 
 ALTER TABLE public.screen_guidance_sessions ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Users can manage their screen guidance records" ON public.screen_guidance_sessions;
 CREATE POLICY "Users can manage their screen guidance records"
     ON public.screen_guidance_sessions
     FOR ALL
     USING (auth.uid() = user_id)
     WITH CHECK (auth.uid() = user_id);
+
+-- Performance Indexes
+CREATE INDEX IF NOT EXISTS idx_learning_documents_user ON public.learning_documents(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_user ON public.conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation ON public.messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_learner_progress_user ON public.learner_progress(user_id);
+CREATE INDEX IF NOT EXISTS idx_website_pages_kb ON public.website_pages(kb_id);

@@ -748,7 +748,7 @@ async def evaluate_teaching_response(req: EvaluateRequest):
     }
 
 
-# --- Aparsoft-Inspired Website Knowledge Endpoints ---
+# --- Website Knowledge Base & Documentation Endpoints ---
 from services.website_knowledge import website_knowledge_service, validate_and_normalize_url
 
 
