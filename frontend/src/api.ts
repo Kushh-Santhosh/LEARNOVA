@@ -13,7 +13,10 @@ import {
   ScreenVerifyResponse,
   AvatarTurn,
   BenchmarkReport,
-  EvaluationPayload
+  EvaluationPayload,
+  WebsiteIngestResponse,
+  WebsiteStatusResponse,
+  WebsiteChatResponse
 } from './types';
 
 const API_BASE = '/api';
@@ -236,5 +239,63 @@ export const api = {
     if (!res.ok) throw new Error('Response evaluation failed');
     return res.json();
   },
+
+  async validateWebsiteUrl(url: string) {
+    const res = await fetch(`${API_BASE}/website/validate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    return res.json();
+  },
+
+  async ingestWebsite(payload: { url: string; max_pages?: number; max_depth?: number }): Promise<WebsiteIngestResponse> {
+    const res = await fetch(`${API_BASE}/website/ingest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Ingestion failed' }));
+      throw new Error(err.detail || 'Website ingestion failed');
+    }
+    return res.json();
+  },
+
+  async getWebsiteStatus(kbId: string): Promise<WebsiteStatusResponse> {
+    const res = await fetch(`${API_BASE}/website/status/${kbId}`);
+    if (!res.ok) throw new Error('Failed to fetch website status');
+    return res.json();
+  },
+
+  async listWebsiteKnowledgeBases() {
+    const res = await fetch(`${API_BASE}/website/list`);
+    return res.json();
+  },
+
+  async searchWebsite(payload: { kb_id: string; query: string; top_k?: number }) {
+    const res = await fetch(`${API_BASE}/website/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return res.json();
+  },
+
+  async chatWebsite(payload: { kb_id: string; question: string }): Promise<WebsiteChatResponse> {
+    const res = await fetch(`${API_BASE}/website/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to query website knowledge');
+    return res.json();
+  },
+
+  async testSupabase() {
+    const res = await fetch(`${API_BASE}/supabase/test`);
+    return res.json();
+  },
 };
+
 

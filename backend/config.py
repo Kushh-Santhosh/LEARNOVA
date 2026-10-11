@@ -23,7 +23,7 @@ class Settings:
 
         # Database / Persistence
         self.SUPABASE_URL: str = os.getenv("SUPABASE_URL", "").strip()
-        self.SUPABASE_PUBLISHABLE_KEY: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", "").strip()
+        self.SUPABASE_PUBLISHABLE_KEY: str = os.getenv("SUPABASE_PUBLISHABLE_KEY", os.getenv("SUPABASE_ANON_KEY", "")).strip()
         self.SUPABASE_SECRET_KEY: str = os.getenv("SUPABASE_SECRET_KEY", "").strip()
 
         # Real-time Voice
@@ -41,6 +41,10 @@ class Settings:
     @property
     def has_openrouter(self) -> bool:
         return bool(self.OPENROUTER_API_KEY)
+
+    @property
+    def has_supabase(self) -> bool:
+        return bool(self.SUPABASE_URL and (self.SUPABASE_PUBLISHABLE_KEY or self.SUPABASE_SECRET_KEY))
 
     @property
     def has_livekit(self) -> bool:

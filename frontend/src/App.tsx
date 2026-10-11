@@ -351,6 +351,7 @@ export function App() {
       <FloatingNovaCompanion
         activeTab={activeTab}
         activeDocId={activeDocId ?? ''}
+        activeDocTitle={activeDoc?.title}
         activeConceptName={activeConcept?.name}
         onStartWorkflow={handleStartWorkflow}
         isGuidingActive={!!activeGuidance}

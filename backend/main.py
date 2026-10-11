@@ -203,6 +203,7 @@ class ResolveMisconceptionRequest(BaseModel):
 
 
 # --- API Routes ---
+from services.supabase_persistence import supabase_service
 
 @app.get("/health")
 @app.get("/api/health")
@@ -214,7 +215,8 @@ def health():
         "active_documents": len(DOCUMENTS),
         "voice_capabilities": voice_service.get_voice_capabilities(),
         "avatar_mode": "liveavatar" if os.getenv("HEYGEN_API_KEY") else "fallback",
-        "llm_gateway": openrouter_router.get_status()
+        "llm_gateway": openrouter_router.get_status(),
+        "persistence": supabase_service.get_status()
     }
 
 @app.get("/api/providers/status")
@@ -226,6 +228,7 @@ async def get_providers_status():
     router_status = openrouter_router.get_status()
     has_livekit = bool(os.getenv("LIVEKIT_URL") and os.getenv("LIVEKIT_API_KEY"))
     has_liveavatar = bool(os.getenv("HEYGEN_API_KEY"))
+    supabase_status = supabase_service.get_status()
 
     return {
         "openrouter": {
@@ -263,8 +266,24 @@ async def get_providers_status():
                 "status": "AVAILABLE" if has_liveavatar else "NOT_CONFIGURED"
             },
             "active_provider": "local_reference_avatar"
+        },
+        "supabase": {
+            "configured": supabase_status["configured"],
+            "status": supabase_status["status"],
+            "fallback_active": supabase_status["fallback_active"],
+            "fallback_mode": supabase_status["fallback_mode"]
         }
     }
+
+@app.get("/api/supabase/status")
+async def get_supabase_status():
+    """Returns detailed safe Supabase persistence status."""
+    return supabase_service.get_status()
+
+@app.get("/api/supabase/test")
+async def test_supabase_endpoint():
+    """Tests live connection to Supabase and reports sanitized result."""
+    return await supabase_service.test_connection()
 
 @app.get("/api/avatar/session")
 async def get_avatar_session():
@@ -727,4 +746,99 @@ async def evaluate_teaching_response(req: EvaluateRequest):
         "evaluation": eval_data,
         "consistency": consistency
     }
+
+
+# --- Aparsoft-Inspired Website Knowledge Endpoints ---
+from services.website_knowledge import website_knowledge_service, validate_and_normalize_url
+
+
+class WebsiteValidateRequest(BaseModel):
+    url: str
+
+
+class WebsiteIngestRequest(BaseModel):
+    url: str
+    max_pages: Optional[int] = 5
+    max_depth: Optional[int] = 2
+
+
+class WebsiteSearchRequest(BaseModel):
+    kb_id: str
+    query: str
+    top_k: Optional[int] = 4
+
+
+class WebsiteChatRequest(BaseModel):
+    kb_id: str
+    question: str
+
+
+@app.post("/api/website/validate")
+def validate_website_url(req: WebsiteValidateRequest):
+    """Validates URL format, DNS resolution, and SSRF security bounds."""
+    is_valid, normalized, err = validate_and_normalize_url(req.url)
+    return {
+        "is_valid": is_valid,
+        "normalized_url": normalized,
+        "error": err
+    }
+
+
+@app.post("/api/website/ingest")
+async def ingest_website(req: WebsiteIngestRequest):
+    """Initiates secure same-origin crawling, text chunking, and indexing."""
+    result = await website_knowledge_service.start_ingestion(
+        url=req.url,
+        max_pages=req.max_pages or 5,
+        max_depth=req.max_depth or 2
+    )
+    if result["status"] == "ERROR":
+        raise HTTPException(status_code=400, detail=result["message"])
+    return result
+
+
+@app.get("/api/website/status/{kb_id}")
+def get_website_status(kb_id: str):
+    """Returns ingestion progress, page counts, and indexing status."""
+    kb = website_knowledge_service.get_knowledge_base(kb_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Website knowledge base not found")
+    return {
+        "kb_id": kb.kb_id,
+        "base_url": kb.base_url,
+        "status": kb.status,
+        "pages_crawled": kb.pages_crawled,
+        "chunk_count": len(kb.chunks),
+        "crawled_urls": kb.crawled_urls,
+        "errors": kb.errors,
+        "updated_at": kb.updated_at
+    }
+
+
+@app.get("/api/website/list")
+def list_website_knowledge_bases():
+    """Lists all active website knowledge bases."""
+    return website_knowledge_service.list_knowledge_bases()
+
+
+@app.post("/api/website/search")
+def search_website_content(req: WebsiteSearchRequest):
+    """Performs retrieval over indexed website chunks."""
+    kb = website_knowledge_service.get_knowledge_base(req.kb_id)
+    if not kb:
+        raise HTTPException(status_code=404, detail="Website knowledge base not found")
+    return {
+        "kb_id": req.kb_id,
+        "results": kb.search(req.query, top_k=req.top_k or 4)
+    }
+
+
+@app.post("/api/website/chat")
+def chat_with_website_content(req: WebsiteChatRequest):
+    """Answers user questions strictly grounded in the indexed website with verifiable citations."""
+    return website_knowledge_service.answer_question(
+        kb_id=req.kb_id,
+        question=req.question
+    )
+
 

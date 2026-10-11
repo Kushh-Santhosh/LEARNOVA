@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
-import { DocumentMeta } from '../types';
+import { DocumentMeta, WebsiteStatusResponse, WebsiteChatResponse } from '../types';
+import { api } from '../api';
 import {
   UploadCloud,
   FileText,
@@ -8,7 +9,11 @@ import {
   Loader2,
   Search,
   BookOpen,
-  Plus
+  Plus,
+  Globe,
+  ExternalLink,
+  AlertCircle,
+  Send
 } from 'lucide-react';
 
 interface DocumentHubScreenProps {
@@ -26,12 +31,22 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
   onUploadFile,
   onEnterClassroom,
 }) => {
+  const [ingestMode, setIngestMode] = useState<'file' | 'website'>('file');
   const [searchQuery, setSearchQuery] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStage, setProcessingStage] = useState<string>('');
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Website Ingestion State
+  const [webUrl, setWebUrl] = useState('');
+  const [isCrawlingWeb, setIsCrawlingWeb] = useState(false);
+  const [webError, setWebError] = useState<string | null>(null);
+  const [crawledKb, setCrawledKb] = useState<WebsiteStatusResponse | null>(null);
+  const [webQuestion, setWebQuestion] = useState('');
+  const [isAskingWeb, setIsAskingWeb] = useState(false);
+  const [webAnswer, setWebAnswer] = useState<WebsiteChatResponse | null>(null);
 
   const stages = [
     'Reading your document',
@@ -98,6 +113,33 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
         </p>
       </div>
 
+      {/* Ingestion Mode Switcher */}
+      <div className="flex items-center gap-2 mb-6">
+        <button
+          onClick={() => setIngestMode('file')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+            ingestMode === 'file'
+              ? 'bg-slate-900 text-white shadow-xs'
+              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          <UploadCloud className="w-4 h-4" />
+          <span>Upload Files (PDF, DOCX, TXT)</span>
+        </button>
+
+        <button
+          onClick={() => setIngestMode('website')}
+          className={`px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${
+            ingestMode === 'website'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          <Globe className="w-4 h-4" />
+          <span>Index Website (Aparsoft Chatbot)</span>
+        </button>
+      </div>
+
       {/* Processing Banner */}
       {isProcessing && (
         <div className="mb-8 p-5 rounded-2xl bg-white border border-slate-200 shadow-sm animate-fadeIn">
@@ -114,43 +156,177 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
         </div>
       )}
 
-      {/* Clean Drag & Drop Area */}
-      <div
-        data-guide-id="btn-upload-dropzone"
-        onDragOver={(e) => {
-          e.preventDefault();
-          setIsDragging(true);
-        }}
-        onDragLeave={() => setIsDragging(false)}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={`mb-8 p-8 rounded-3xl border border-dashed transition-all cursor-pointer text-center flex flex-col items-center justify-center ${
-          isDragging
-            ? 'border-slate-900 bg-slate-100'
-            : 'border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50/50'
-        }`}
-      >
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              handleFileProcess(e.target.files[0]);
-            }
+      {/* Mode A: Clean Drag & Drop Area */}
+      {ingestMode === 'file' && (
+        <div
+          data-guide-id="btn-upload-dropzone"
+          onDragOver={(e) => {
+            e.preventDefault();
+            setIsDragging(true);
           }}
-          className="hidden"
-          accept=".pdf,.docx,.doc,.txt,.md,.markdown"
-        />
-        <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-600 mb-3">
-          <UploadCloud className="w-5 h-5" />
+          onDragLeave={() => setIsDragging(false)}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+          className={`mb-8 p-8 rounded-3xl border border-dashed transition-all cursor-pointer text-center flex flex-col items-center justify-center ${
+            isDragging
+              ? 'border-slate-900 bg-slate-100'
+              : 'border-slate-300 bg-white hover:border-slate-400 hover:bg-slate-50/50'
+          }`}
+        >
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={(e) => {
+              if (e.target.files && e.target.files[0]) {
+                handleFileProcess(e.target.files[0]);
+              }
+            }}
+            className="hidden"
+            accept=".pdf,.docx,.doc,.txt,.md,.markdown"
+          />
+          <div className="w-10 h-10 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-600 mb-3">
+            <UploadCloud className="w-5 h-5" />
+          </div>
+          <div className="text-sm font-medium text-slate-900">
+            Drop your study document here, or <span className="text-blue-600 font-semibold underline underline-offset-2">browse</span>
+          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            Supports PDF, Word (DOCX), Markdown, and TXT with scalable indexing
+          </p>
         </div>
-        <div className="text-sm font-medium text-slate-900">
-          Drop your study document here, or <span className="text-blue-600 font-semibold underline underline-offset-2">browse</span>
+      )}
+
+      {/* Mode B: Aparsoft-Inspired Website Knowledge Ingestion Area */}
+      {ingestMode === 'website' && (
+        <div className="mb-8 p-6 rounded-3xl bg-white border border-slate-200/90 shadow-sm space-y-4 animate-fadeIn">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+                <Globe className="w-4 h-4 text-indigo-600" />
+                <span>Index Educational Website & Documentation</span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Crawls safe same-origin pages (respects robots.txt, blocks SSRF) and creates a searchable question-answering index.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={webUrl}
+              onChange={(e) => setWebUrl(e.target.value)}
+              placeholder="https://docs.python.org/3/tutorial/"
+              className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 text-xs bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none"
+            />
+            <button
+              onClick={async () => {
+                if (!webUrl.trim() || isCrawlingWeb) return;
+                setIsCrawlingWeb(true);
+                setWebError(null);
+                try {
+                  const res = await api.ingestWebsite({ url: webUrl, max_pages: 5, max_depth: 2 });
+                  setCrawledKb({
+                    kb_id: res.kb_id,
+                    base_url: res.base_url,
+                    status: 'completed',
+                    pages_crawled: res.pages_crawled,
+                    chunk_count: res.chunk_count,
+                    crawled_urls: [],
+                    errors: res.errors
+                  });
+                } catch (err: any) {
+                  setWebError(err.message || 'Crawl error');
+                } finally {
+                  setIsCrawlingWeb(false);
+                }
+              }}
+              disabled={!webUrl.trim() || isCrawlingWeb}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer shrink-0"
+            >
+              {isCrawlingWeb ? 'Crawling Pages...' : 'Crawl & Index'}
+            </button>
+          </div>
+
+          {webError && (
+            <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>{webError}</span>
+            </div>
+          )}
+
+          {crawledKb && (
+            <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 space-y-3">
+              <div className="flex items-center gap-2 text-xs font-semibold text-emerald-950">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Successfully Indexed: {crawledKb.base_url}</span>
+              </div>
+              <p className="text-xs text-emerald-900/80">
+                Crawled <strong>{crawledKb.pages_crawled}</strong> same-origin pages and formed <strong>{crawledKb.chunk_count}</strong> searchable concept chunks.
+              </p>
+
+              {/* Ask Question on Crawled Content */}
+              <div className="pt-2 border-t border-emerald-200/80 space-y-2">
+                <span className="text-[11px] font-semibold text-emerald-900 block">
+                  Ask a question grounded in this website:
+                </span>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={webQuestion}
+                    onChange={(e) => setWebQuestion(e.target.value)}
+                    placeholder="e.g. What are the key features and syntax?"
+                    className="flex-1 px-3 py-2 rounded-xl border border-emerald-300/80 bg-white text-xs outline-none focus:border-emerald-600"
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!webQuestion.trim() || isAskingWeb || !crawledKb) return;
+                      setIsAskingWeb(true);
+                      try {
+                        const ans = await api.chatWebsite({ kb_id: crawledKb.kb_id, question: webQuestion });
+                        setWebAnswer(ans);
+                      } catch (err: any) {
+                        setWebError(err.message);
+                      } finally {
+                        setIsAskingWeb(false);
+                      }
+                    }}
+                    disabled={!webQuestion.trim() || isAskingWeb}
+                    className="p-2 bg-emerald-800 text-white rounded-xl hover:bg-emerald-900 cursor-pointer disabled:opacity-40"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {webAnswer && (
+                  <div className="mt-2 p-3 bg-white rounded-xl border border-emerald-200 text-xs text-slate-800 space-y-2">
+                    <p className="whitespace-pre-wrap leading-relaxed">{webAnswer.answer}</p>
+                    {webAnswer.citations && webAnswer.citations.length > 0 && (
+                      <div className="pt-2 border-t border-slate-100 space-y-1 text-[10px]">
+                        <span className="font-semibold text-emerald-800 block">Verified Website Sources:</span>
+                        {webAnswer.citations.map((c, i) => (
+                          <div key={i} className="p-1.5 rounded-lg bg-slate-50 border border-slate-200/60">
+                            <a
+                              href={c.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-medium text-indigo-600 hover:underline flex items-center gap-1"
+                            >
+                              <span>{c.title}</span>
+                              <ExternalLink className="w-2.5 h-2.5" />
+                            </a>
+                            <p className="text-slate-500 mt-0.5 line-clamp-2">{c.excerpt}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-        <p className="text-xs text-slate-400 mt-1">
-          Supports PDF, Word (DOCX), Markdown, and TXT with scalable indexing
-        </p>
-      </div>
+      )}
 
       {uploadError && (
         <div className="mb-6 p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs">

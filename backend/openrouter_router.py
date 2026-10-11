@@ -105,14 +105,21 @@ class OpenRouterFreeRouter:
         self._model_health: Dict[str, Dict[str, Any]] = {}
         # Controlled test-mode simulation hook (never active unless set explicitly by test harness)
         self._simulated_failures: Dict[Any, Any] = {}
+        self._simulated_responses: Dict[Any, str] = {}
 
-    def set_simulation(self, failures: Dict[Any, Any]) -> None:
-        """Configures simulated model failures for controlled test passes."""
-        self._simulated_failures = dict(failures)
+    def set_simulation(
+        self,
+        failures: Optional[Dict[Any, Any]] = None,
+        responses: Optional[Dict[Any, str]] = None
+    ) -> None:
+        """Configures simulated model failures and responses for controlled test passes."""
+        self._simulated_failures = dict(failures or {})
+        self._simulated_responses = dict(responses or {})
 
     def clear_simulation(self) -> None:
         """Clears all test simulations."""
         self._simulated_failures = {}
+        self._simulated_responses = {}
 
     @property
     def api_key(self) -> str:
@@ -307,9 +314,30 @@ class OpenRouterFreeRouter:
                 elif isinstance(sim_failure, int) and sim_failure in [500, 502, 503, 504]:
                     self._record_failure(model_id, f"http_{sim_failure}_server_error")
                     continue
-                elif sim_failure == "all_fail":
-                    self._record_failure(model_id, "simulated_fail")
+                elif sim_failure in ("all_fail", "simulated_fail", "malformed", "network_error"):
+                    self._record_failure(model_id, f"simulated_{sim_failure}")
                     continue
+
+            # Controlled test simulated response
+            sim_resp = self._simulated_responses.get(model_id) or self._simulated_responses.get(attempt)
+            if sim_resp:
+                self._record_success(model_id)
+                self.last_active_model = model_id
+                self.last_provider = "OpenRouter"
+                self.last_cost_tier = "FREE ($0.00)"
+                self.fallback_status = "Available / Active"
+                self.last_latency_ms = 12.0
+                self.last_attempt_count = attempt
+                self.last_fallback_used = (attempt > 1)
+                return {
+                    "provider": "openrouter",
+                    "model": model_id,
+                    "text": sim_resp,
+                    "cost_tier": "FREE",
+                    "latency_ms": 12.0,
+                    "attempt": attempt,
+                    "fallback_used": attempt > 1,
+                }
 
             payload = {
                 "model": model_id,

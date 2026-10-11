@@ -202,24 +202,33 @@ class TeacherBrain:
         elif "Thinking Process:" in text and "EXPLANATION:" in text:
             text = text[text.find("EXPLANATION:"):]
 
+        # Strip prompt template placeholder echoes
+        text = re.sub(r"SPOKEN:\s*\[[^\]]+\]", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"EXPLANATION:\s*\[[^\]]+\]", "", text, flags=re.IGNORECASE)
+
         # Handle models that format as [SPOKEN('...')
         text = re.sub(r"^\[\s*SPOKEN\s*\(['\"]?", "SPOKEN: ", text)
         text = re.sub(r"['\"]?\s*,\s*EXPLANATION\s*=\s*['\"]?", "\nEXPLANATION:\n", text)
         text = re.sub(r"['\"]?\s*\]\s*$", "", text)
 
-        spoken_text = ""
-        detailed_text = text
+        spoken_matches = list(re.finditer(r"(?:^|\n)\s*(?:\d+\.\s*)?SPOKEN:\s*(.*?)(?=(?:\n\s*(?:\d+\.\s*)?EXPLANATION:)|$)", text, re.DOTALL | re.IGNORECASE))
+        explanation_matches = list(re.finditer(r"(?:^|\n)\s*(?:\d+\.\s*)?EXPLANATION:\s*(.*?)(?=(?:\n\s*(?:\d+\.\s*)?EXPLANATION:)|$)", text, re.DOTALL | re.IGNORECASE))
 
-        if "SPOKEN:" in text and "EXPLANATION:" in text:
-            parts = text.split("EXPLANATION:")
-            spoken_text = parts[0].replace("SPOKEN:", "").strip()
-            detailed_text = parts[1].strip()
-        elif "SPOKEN:" in text:
-            spoken_text = text.replace("SPOKEN:", "").strip()
+        if spoken_matches and explanation_matches:
+            # Pick the richest explanation and spoken blocks (avoids single-line trailing safety summaries)
+            detailed_text = max([m.group(1).strip() for m in explanation_matches], key=len)
+            spoken_text = max([m.group(1).strip() for m in spoken_matches], key=len)
+        elif explanation_matches:
+            detailed_text = max([m.group(1).strip() for m in explanation_matches], key=len)
+            sentences = re.split(r'(?<=[.!?])\s+', detailed_text)
+            spoken_text = " ".join(sentences[:2]) if len(sentences) > 1 else sentences[0]
+        elif spoken_matches:
+            spoken_text = max([m.group(1).strip() for m in spoken_matches], key=len)
             detailed_text = spoken_text
         else:
             sentences = re.split(r'(?<=[.!?])\s+', text.strip())
             spoken_text = " ".join(sentences[:2]) if len(sentences) > 1 else sentences[0]
+            detailed_text = text.strip()
 
         concept_slug = re.sub(r'[^a-z0-9]+', '_', active_concept.lower()).strip('_')
         learner_state.record_concept_interaction(concept_slug, 0.05)

@@ -474,3 +474,38 @@ export interface ScreenCapabilities {
   };
 }
 
+export interface WebsiteIngestResponse {
+  status: 'SUCCESS' | 'FAILED' | 'ERROR';
+  kb_id: string;
+  base_url: string;
+  pages_crawled: number;
+  chunk_count: number;
+  errors: string[];
+}
+
+export interface WebsiteStatusResponse {
+  kb_id: string;
+  base_url: string;
+  status: 'pending' | 'crawling' | 'indexing' | 'completed' | 'failed';
+  pages_crawled: number;
+  chunk_count: number;
+  crawled_urls: string[];
+  errors: string[];
+}
+
+export interface WebsiteCitation {
+  url: string;
+  title: string;
+  excerpt: string;
+  relevance_score?: number;
+}
+
+export interface WebsiteChatResponse {
+  answer: string;
+  has_sufficient_evidence: boolean;
+  citations: WebsiteCitation[];
+  kb_id: string;
+  base_url?: string;
+}
+
+
