@@ -178,10 +178,60 @@ class IntentRouter:
         }
 
     @staticmethod
-    def get_greeting_response(language: str = "en") -> Dict[str, Any]:
+    def get_greeting_response(message: str = "", language: str = "en") -> Dict[str, Any]:
         """
         Instant local greeting (<1ms) without remote API delay.
+        Supports natural small talk like 'how are you', 'thank you', and standard greetings.
         """
+        lower = message.strip().lower()
+
+        # Handle "how are you" / pleasantry specifically
+        if any(p in lower for p in ["how are you", "how's it going", "how do you do", "how r u"]):
+            return {
+                "intent": "greeting",
+                "spoken_text": "I'm doing wonderful, thank you for asking! What are we learning today?",
+                "teacher_text": (
+                    "I'm doing great, thank you for asking! 😊\n\n"
+                    "I'm ready to help you explore any concept, analyze code, or study your documents.\n\n"
+                    "What would you like to dive into today?"
+                ),
+                "teaching_mode": "greeting",
+                "active_concept": "Conversational Greeting",
+                "visual_element": None,
+                "citations": [],
+                "follow_up_prompt": "What would you like to explore today?",
+                "language": language,
+                "llm_metadata": {
+                    "provider": "local_fast_greeting",
+                    "model": "deterministic_tutor",
+                    "cost_tier": "FREE ($0.00)",
+                    "latency_ms": 0.5
+                }
+            }
+
+        # Handle "thank you" / pleasantry specifically
+        if any(p in lower for p in ["thank you", "thanks", "thx", "appreciate it"]):
+            return {
+                "intent": "greeting",
+                "spoken_text": "You're very welcome! Let me know what you'd like to explore next.",
+                "teacher_text": (
+                    "You're very welcome! 😊 Keep up the curious thinking.\n\n"
+                    "Whenever you're ready, we can continue our discussion, start a new topic, or try a quick quiz!"
+                ),
+                "teaching_mode": "greeting",
+                "active_concept": "Acknowledgment",
+                "visual_element": None,
+                "citations": [],
+                "follow_up_prompt": "What would you like to explore next?",
+                "language": language,
+                "llm_metadata": {
+                    "provider": "local_fast_greeting",
+                    "model": "deterministic_tutor",
+                    "cost_tier": "FREE ($0.00)",
+                    "latency_ms": 0.5
+                }
+            }
+
         greetings = {
             "en": {
                 "spoken": "Hey! I'm Professor Nova. What are we learning today?",

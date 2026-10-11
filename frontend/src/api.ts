@@ -69,11 +69,12 @@ export const api = {
     active_concept?: string;
     mode?: string;
     language?: string;
-  }): Promise<TeacherResponse> {
+  }, signal?: AbortSignal): Promise<TeacherResponse> {
     const res = await fetch(`${API_BASE}/teach`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
+      signal,
     });
     if (!res.ok) throw new Error('Teacher response error');
     return res.json();

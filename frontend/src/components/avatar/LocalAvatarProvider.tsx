@@ -298,227 +298,321 @@ export const LocalAvatarProvider: React.FC<AvatarProviderProps> = ({
 
   const stateInfo = {
     idle: { label: 'Ready to Teach', dotColor: 'bg-emerald-500' },
-    listening: { label: 'Listening...', dotColor: 'bg-cyan-500 animate-pulse' },
-    thinking: { label: 'Thinking...', dotColor: 'bg-blue-500 animate-pulse' },
-    speaking: { label: `Speaking (${currentExpression})`, dotColor: 'bg-teal-500 animate-pulse' },
-    interrupted: { label: 'Listening', dotColor: 'bg-amber-500' },
+    listening: { label: 'Listening...', dotColor: 'bg-amber-500 animate-pulse' },
+    thinking: { label: 'Thinking...', dotColor: 'bg-indigo-500 animate-pulse' },
+    speaking: { label: 'Speaking', dotColor: 'bg-teal-500 animate-pulse' },
+    interrupted: { label: 'Interrupted', dotColor: 'bg-orange-500' },
     connecting: { label: 'Connecting...', dotColor: 'bg-blue-400 animate-pulse' },
     error: { label: 'Offline', dotColor: 'bg-rose-500' },
   }[state] || { label: 'Ready to Teach', dotColor: 'bg-emerald-500' };
 
   return (
     <div
-      className={`relative flex flex-col items-center justify-between rounded-3xl bg-white text-slate-800 p-4 border border-slate-200/90 shadow-xs select-none transition-all duration-300 ${
-        isFocusMode ? 'w-full max-w-md mx-auto py-6' : 'w-full'
+      className={`relative flex flex-col rounded-3xl bg-white text-slate-800 p-4 sm:p-5 border border-slate-200/90 shadow-xs select-none transition-all duration-300 w-full overflow-hidden ${
+        isFocusMode ? 'max-w-md mx-auto py-6' : ''
       } ${className}`}
     >
       {/* Top Header: Identity & State Status */}
-      <div className="w-full flex items-center justify-between mb-2 px-1 text-xs">
-        <div className="flex items-center space-x-2">
-          <span className={`w-2 h-2 rounded-full ${stateInfo.dotColor}`} />
-          <div className="flex flex-col">
-            <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-slate-900 text-xs">
+      <div className="w-full flex items-center justify-between pb-3 border-b border-slate-100">
+        <div className="flex items-center space-x-2.5 min-w-0">
+          <div className="flex flex-col min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="font-bold text-slate-900 text-sm tracking-tight truncate">
                 Professor Nova
               </span>
-              <span className="text-[9px] px-1.5 py-0.2 rounded font-mono font-medium bg-teal-50 text-teal-700 border border-teal-200">
-                {mode === 'mode_a_local' ? 'Mode A (Local)' : mode === 'mode_b_hq' ? 'Mode B (HQ)' : 'Mode C (Text)'}
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-indigo-50 text-indigo-700 border border-indigo-200/80">
+                AI Tutor
               </span>
             </div>
-            <span className="text-[10px] text-slate-400 font-medium">
-              {stateInfo.label}
-            </span>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${stateInfo.dotColor}`} />
+              <span className="text-xs text-slate-500 font-medium truncate">
+                {stateInfo.label}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* Header Controls */}
-        <div className="flex items-center space-x-1 text-slate-400">
+        {/* Header Action Controls */}
+        <div className="flex items-center space-x-1 text-slate-400 shrink-0">
           {onOpenBenchmark && (
             <button
               onClick={onOpenBenchmark}
-              title="Open Avatar Quality Benchmark Dashboard"
-              className="p-1.5 rounded-lg hover:text-teal-700 hover:bg-teal-50 transition-colors cursor-pointer"
+              title="View Avatar & Voice Telemetry Benchmarks"
+              aria-label="Open telemetry benchmark dashboard"
+              className="p-1.5 rounded-lg hover:text-indigo-700 hover:bg-indigo-50 transition-colors cursor-pointer"
             >
-              <BarChart2 className="w-3.5 h-3.5" />
+              <BarChart2 className="w-4 h-4" />
             </button>
           )}
           {onReplay && (
             <button
               onClick={onReplay}
-              title="Replay explanation"
-              className="p-1.5 rounded-lg hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+              disabled={!spokenText}
+              title={spokenText ? "Replay explanation" : "No speech to replay"}
+              aria-label="Replay explanation"
+              className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                spokenText ? 'hover:text-slate-900 hover:bg-slate-100 text-slate-600' : 'text-slate-300 cursor-not-allowed'
+              }`}
             >
-              <RefreshCw className="w-3.5 h-3.5" />
+              <RefreshCw className="w-4 h-4" />
             </button>
           )}
           {onToggleMute && (
             <button
               onClick={onToggleMute}
-              title={isMuted ? 'Unmute voice' : 'Mute voice'}
-              className="p-1.5 rounded-lg hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+              title={isMuted ? 'Unmute Professor Nova' : 'Mute Professor Nova'}
+              aria-label={isMuted ? 'Unmute voice' : 'Mute voice'}
+              className="p-1.5 rounded-lg hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
             >
-              {isMuted ? <VolumeX className="w-3.5 h-3.5 text-rose-500" /> : <Volume2 className="w-3.5 h-3.5" />}
+              {isMuted ? <VolumeX className="w-4 h-4 text-rose-500" /> : <Volume2 className="w-4 h-4 text-slate-600" />}
             </button>
           )}
           {onToggleFocusMode && (
             <button
               onClick={onToggleFocusMode}
               title={isFocusMode ? 'Exit focus mode' : 'Expand focus mode'}
-              className="p-1.5 rounded-lg hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+              aria-label={isFocusMode ? 'Exit focus mode' : 'Expand focus mode'}
+              className="p-1.5 rounded-lg hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
             >
-              {isFocusMode ? <Minimize2 className="w-3.5 h-3.5" /> : <Maximize2 className="w-3.5 h-3.5" />}
+              {isFocusMode ? <Minimize2 className="w-4 h-4 text-indigo-600" /> : <Maximize2 className="w-4 h-4 text-slate-600" />}
             </button>
           )}
         </div>
       </div>
 
       {/* Authoritative Reference Avatar Character Stage */}
-      <div
-        className={`relative flex items-center justify-center transition-all duration-300 ${
-          isFocusMode ? 'w-56 h-56 my-3' : 'w-40 h-40 my-1'
-        }`}
-      >
-        {/* Character Stage with Contextual Head Animation */}
+      <div className="w-full flex items-center justify-center my-3">
         <div
-          className="relative w-full h-full flex items-center justify-center pointer-events-none select-none transition-transform duration-200"
-          style={{
-            transform: headTransform,
-            animation:
-              state === 'idle'
-                ? 'nova-idle-breath 4.2s ease-in-out infinite'
-                : undefined,
-          }}
+          className={`relative flex items-center justify-center rounded-2xl bg-gradient-to-b from-slate-100/90 via-slate-50 to-indigo-50/40 border border-slate-200/70 p-3 shadow-inner overflow-hidden transition-all duration-300 ${
+            isFocusMode ? 'w-56 h-56' : 'w-44 h-44'
+          }`}
         >
-          {/* Authoritative Uploaded Reference Image: Full unclipped character */}
-          <img
-            src="/professor_nova.png"
-            alt="Professor Nova"
-            className="w-full h-full object-contain pointer-events-none select-none drop-shadow-sm"
-          />
-
-          {/* Expressive Eyebrow Overlay on Visor */}
+          {/* Character Stage with Contextual Head Animation */}
           <div
-            className="absolute pointer-events-none"
+            className="relative w-full h-full flex items-center justify-center pointer-events-none select-none transition-transform duration-200 motion-reduce:transition-none"
             style={{
-              width: '35.5%',
-              height: '5.5%',
-              left: '32.2%',
-              top: '36.2%',
+              transform: headTransform,
+              animation:
+                state === 'idle'
+                  ? 'nova-idle-breath 4.2s ease-in-out infinite'
+                  : undefined,
             }}
           >
-            <svg viewBox="0 0 60 14" className="w-full h-full overflow-visible">
-              {eyebrowSvg}
-            </svg>
-          </div>
-
-          {/* Natural Eye Blinking Overlay (Screen color #242f42 matched to face display) */}
-          <div
-            className={`absolute inset-0 pointer-events-none transition-opacity duration-75 ${
-              isBlinking ? 'opacity-100' : 'opacity-0'
-            }`}
-          >
-            {/* Left Eye Eyelid Cover */}
-            <div
-              className="absolute rounded-full bg-[#242f42]"
-              style={{
-                width: '7.0%',
-                height: '10.8%',
-                left: '32.5%',
-                top: '40.8%',
-              }}
+            {/* Authoritative Uploaded Reference Image: Full unclipped character */}
+            <img
+              src="/professor_nova.png"
+              alt="Professor Nova"
+              className="w-full h-full object-contain pointer-events-none select-none drop-shadow-md"
             />
-            {/* Right Eye Eyelid Cover */}
-            <div
-              className="absolute rounded-full bg-[#242f42]"
-              style={{
-                width: '7.0%',
-                height: '10.8%',
-                left: '59.2%',
-                top: '40.8%',
-              }}
-            />
-          </div>
 
-          {/* Authoritative Rhubarb 2D Viseme Mouth Renderer */}
-          {!isBlinking && (
+            {/* Expressive Eyebrow Overlay on Visor */}
             <div
-              className="absolute pointer-events-none transition-transform duration-75"
+              className="absolute pointer-events-none"
               style={{
-                width: '7.6%',
-                height: '4.2%',
-                left: '45.8%',
-                top: '53.8%',
+                width: '35.5%',
+                height: '5.5%',
+                left: '32.2%',
+                top: '36.2%',
               }}
             >
-              <svg viewBox="0 0 40 20" className="w-full h-full overflow-visible">
-                {renderMouthShape()}
+              <svg viewBox="0 0 60 14" className="w-full h-full overflow-visible">
+                {eyebrowSvg}
               </svg>
+            </div>
+
+            {/* Natural Eye Blinking Overlay (Screen color #242f42 matched to face display) */}
+            <div
+              className={`absolute inset-0 pointer-events-none transition-opacity duration-75 ${
+                isBlinking ? 'opacity-100' : 'opacity-0'
+              }`}
+            >
+              {/* Left Eye Eyelid Cover */}
+              <div
+                className="absolute rounded-full bg-[#242f42]"
+                style={{
+                  width: '7.0%',
+                  height: '10.8%',
+                  left: '32.5%',
+                  top: '40.8%',
+                }}
+              />
+              {/* Right Eye Eyelid Cover */}
+              <div
+                className="absolute rounded-full bg-[#242f42]"
+                style={{
+                  width: '7.0%',
+                  height: '10.8%',
+                  left: '59.2%',
+                  top: '40.8%',
+                }}
+              />
+            </div>
+
+            {/* Authoritative Rhubarb 2D Viseme Mouth Renderer */}
+            {!isBlinking && (
+              <div
+                className="absolute pointer-events-none transition-transform duration-75"
+                style={{
+                  width: '7.6%',
+                  height: '4.2%',
+                  left: '45.8%',
+                  top: '53.8%',
+                }}
+              >
+                <svg viewBox="0 0 40 20" className="w-full h-full overflow-visible">
+                  {renderMouthShape()}
+                </svg>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Spoken Captions Card */}
+      <div className="w-full rounded-2xl bg-slate-50/90 border border-slate-200/80 p-3 shadow-2xs">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Captions
+          </span>
+          {state === 'speaking' && onInterrupt && (
+            <button
+              onClick={onInterrupt}
+              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-medium cursor-pointer"
+            >
+              Stop speaking
+            </button>
+          )}
+        </div>
+        {spokenText ? (
+          <p className="text-xs text-slate-700 leading-relaxed max-h-20 overflow-y-auto font-normal">
+            "{spokenText}"
+          </p>
+        ) : (
+          <p className="text-xs text-slate-400 italic text-center py-1">
+            Captions will appear here when Professor Nova speaks.
+          </p>
+        )}
+      </div>
+
+      {/* Voice & Avatar Mode Segmented Control */}
+      {onModeChange && (
+        <div className="w-full mt-3">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-1.5 px-0.5">
+            Voice Mode
+          </div>
+          <div className="w-full grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200/70 text-xs font-medium">
+            <button
+              onClick={() => onModeChange('mode_a_local')}
+              title="Fast client-side speech synthesis with 2D mouth animations (Zero added latency, ₹0/min)"
+              className={`py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer truncate ${
+                mode === 'mode_a_local'
+                  ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              Local Nova
+            </button>
+            <button
+              onClick={() => onModeChange('mode_b_hq')}
+              title="Live cloud video stream via LiveKit/HeyGen (Requires active WebRTC token)"
+              className={`py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer truncate ${
+                mode === 'mode_b_hq'
+                  ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              Cloud Video
+            </button>
+            <button
+              onClick={() => onModeChange('mode_c_text')}
+              title="Silent reading mode without voice synthesis or mouth movement"
+              className={`py-1.5 px-2 rounded-lg text-center transition-all cursor-pointer truncate ${
+                mode === 'mode_c_text'
+                  ? 'bg-white text-slate-900 shadow-xs font-semibold'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+              }`}
+            >
+              Text Only
+            </button>
+          </div>
+          {mode === 'mode_b_hq' && (
+            <div className="mt-1 text-[10px] text-amber-700 bg-amber-50 rounded-lg px-2 py-1 border border-amber-200 text-center">
+              Cloud video awaiting WebRTC session • Local avatar active as preview
             </div>
           )}
         </div>
-      </div>
-
-      {/* Real-time Engineering Telemetry Pill (Cost, Latency, Lip-Sync Shape) */}
-      <div className="w-full flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl px-2.5 py-1.5 mt-2 mb-1 text-[10px]">
-        <div className="flex items-center gap-1.5 text-slate-600">
-          <Cpu className="w-3 h-3 text-teal-600" />
-          <span className="font-semibold text-slate-800" title="Server-side avatar rendering cost">
-            {mode === 'mode_a_local' ? 'Server Render: ₹0.00/min' : mode === 'mode_b_hq' ? '₹12.98/min (Cloud)' : '₹0.00/min (Text)'}
-          </span>
-          <span className="text-slate-400">•</span>
-          <span className="text-emerald-700 font-medium">≤ ₹10 Met</span>
-        </div>
-
-        <div className="flex items-center gap-1.5 font-mono text-slate-500">
-          <Activity className="w-3 h-3 text-teal-500" />
-          <span title="Backend avatar-plan generation latency">
-            Plan: {avatarTurn?.backend_avatar_plan_latency_ms != null ? `${avatarTurn.backend_avatar_plan_latency_ms}ms` : '0.9ms'}
-          </span>
-          <span className="text-slate-300">•</span>
-          <span className="px-1 py-0.2 bg-teal-100/70 text-teal-800 rounded font-semibold text-[9px]" title="Rhubarb-compatible viseme mouth shape (A-H, X)">
-            Viseme {currentViseme}
-          </span>
-        </div>
-      </div>
-
-      {/* Spoken Captions Bar */}
-      {spokenText && (
-        <div className="w-full mt-1.5 pt-1.5 border-t border-slate-100 px-2 text-center">
-          <p className="text-[11px] text-slate-600 italic font-serif leading-relaxed line-clamp-3">
-            "{spokenText}"
-          </p>
-        </div>
       )}
 
-      {/* Mode Switcher Footer */}
-      {onModeChange && (
-        <div className="w-full flex items-center justify-center gap-1 mt-2 pt-2 border-t border-slate-100 text-[10px]">
-          <span className="text-slate-400 mr-1">Mode:</span>
-          {(['mode_a_local', 'mode_b_hq', 'mode_c_text'] as const).map((m) => (
+      {/* Engineering Telemetry Cards */}
+      <div className="w-full mt-3 pt-2.5 border-t border-slate-100">
+        <div className="flex items-center justify-between mb-1.5 px-0.5">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            Telemetry & Metrics
+          </span>
+          {onOpenBenchmark && (
             <button
-              key={m}
-              onClick={() => onModeChange(m)}
-              className={`px-2 py-0.5 rounded-full transition-colors cursor-pointer font-medium ${
-                mode === m
-                  ? 'bg-teal-600 text-white shadow-2xs'
-                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-              }`}
+              onClick={onOpenBenchmark}
+              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-medium cursor-pointer"
             >
-              {m === 'mode_a_local' ? 'Local Nova' : m === 'mode_b_hq' ? 'Cloud Video' : 'Text Only'}
+              Benchmarks →
             </button>
-          ))}
+          )}
         </div>
-      )}
 
-      {/* Interruption Action Button (Immediate feedback) */}
-      {state === 'speaking' && onInterrupt && (
-        <button
-          onClick={onInterrupt}
-          className="mt-2 text-[10px] text-slate-500 hover:text-slate-800 px-2.5 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
-        >
-          Click to interrupt
-        </button>
-      )}
+        <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+          {/* Card 1: Pipeline Mode */}
+          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/60">
+            <div className="text-[10px] text-slate-400 font-medium">Render Engine</div>
+            <div className="font-semibold text-slate-800 truncate">
+              {mode === 'mode_a_local' ? 'Local Canvas' : mode === 'mode_b_hq' ? 'Cloud WebRTC' : 'Text Only'}
+            </div>
+            <div className="text-[10px] text-slate-500 font-mono mt-0.5">
+              Viseme {currentViseme}
+            </div>
+          </div>
+
+          {/* Card 2: Latency */}
+          <div className="p-2 rounded-xl bg-slate-50 border border-slate-200/60">
+            <div className="text-[10px] text-slate-400 font-medium">Avatar Latency</div>
+            <div className="font-semibold text-slate-800">
+              {avatarTurn?.backend_avatar_plan_latency_ms != null && avatarTurn.backend_avatar_plan_latency_ms > 0
+                ? `${avatarTurn.backend_avatar_plan_latency_ms} ms`
+                : 'Not measured'}
+            </div>
+            <div className="text-[10px] text-slate-500 mt-0.5">
+              {avatarTurn?.client_telemetry?.client_render_latency_ms
+                ? `${avatarTurn.client_telemetry.client_render_latency_ms}ms render`
+                : 'Client phonetics'}
+            </div>
+          </div>
+
+          {/* Card 3: Avatar Cost */}
+          <div className="col-span-2 p-2 rounded-xl bg-slate-50 border border-slate-200/60 flex items-center justify-between">
+            <div>
+              <div className="text-[10px] text-slate-400 font-medium">Avatar Render Cost</div>
+              <div className="font-semibold text-slate-800">
+                {mode === 'mode_b_hq' ? '₹12.98 / min' : '₹0.00 / min (Local)'}
+              </div>
+            </div>
+            <div>
+              {mode === 'mode_b_hq' ? (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-rose-50 text-rose-700 border border-rose-200">
+                  Over Budget (&gt; ₹10)
+                </span>
+              ) : (
+                <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  ≤ ₹10 Budget Met
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-1.5 text-[9px] text-slate-400 text-center">
+          *Avatar render cost only. LLM API inference accounted separately.
+        </div>
+      </div>
     </div>
   );
 };

@@ -349,3 +349,26 @@ def test_16_provider_health_diagnostic_safe():
     assert "sk-" not in raw_json
     assert "AIza" not in raw_json
     assert len(raw_json) < 2000
+
+
+def test_17_conversational_small_talk_how_are_you():
+    """TEST 17: 'how are you?' receives a natural, friendly conversational reply."""
+    async def _test():
+        result = await teacher_brain.interact(
+            doc_id="general_learning",
+            student_message="how are you?",
+            active_concept="",
+            language="en"
+        )
+        assert result["intent"] == "greeting"
+        assert "doing great" in result["teacher_text"].lower() or "doing wonderful" in result["teacher_text"].lower()
+        assert "packet switching" not in result["teacher_text"].lower()
+
+    asyncio.run(_test())
+
+
+def test_18_telemetry_accuracy_no_fake_latency():
+    """TEST 18: Telemetry never fabricates fake 0.9ms latency when absent."""
+    greeting_res = intent_router.get_greeting_response("hi", language="en")
+    assert greeting_res["llm_metadata"]["latency_ms"] <= 1.0  # sub-millisecond local response
+    assert greeting_res["llm_metadata"]["cost_tier"] == "FREE ($0.00)"

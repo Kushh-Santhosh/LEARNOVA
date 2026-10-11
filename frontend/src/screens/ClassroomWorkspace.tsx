@@ -32,7 +32,11 @@ import {
   Maximize2,
   ChevronRight,
   Menu,
-  X
+  X,
+  BookOpen,
+  FileText,
+  RefreshCw,
+  Square
 } from 'lucide-react';
 
 import { AvatarTurn } from '../types';
@@ -46,6 +50,7 @@ interface ClassroomWorkspaceProps {
   onChangeLanguage: (lang: string) => void;
   onOpenMobileNav?: () => void;
   onOpenBenchmark?: () => void;
+  onOpenDocuments?: () => void;
 }
 
 interface ChatMessage {
@@ -58,6 +63,8 @@ interface ChatMessage {
   artifact?: LearningArtifact | null;
   citations?: Citation[];
   timestamp: string;
+  isError?: boolean;
+  retryText?: string;
 }
 
 export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
@@ -69,6 +76,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
   onChangeLanguage,
   onOpenMobileNav,
   onOpenBenchmark,
+  onOpenDocuments,
 }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
@@ -81,7 +89,6 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
   const [activeAvatarTurn, setActiveAvatarTurn] = useState<AvatarTurn | null>(null);
   const [avatarMode, setAvatarMode] = useState<'mode_a_local' | 'mode_b_hq' | 'mode_c_text'>('mode_a_local');
 
-
   // Contextual Artifact / Source state
   const [activeArtifact, setActiveArtifact] = useState<LearningArtifact | null>(null);
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
@@ -92,6 +99,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
   const [isVoiceSettingsOpen, setIsVoiceSettingsOpen] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -110,9 +118,9 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
       if (!activeDoc) {
         // General conversational AI tutor mode — clean initial greeting
         initialText =
-          "Hi! I'm **Professor Nova**, your adaptive AI tutor.\n\n" +
-          "What would you like to learn today? You can ask any question, request code, or upload documents to explore!";
-        initialSpoken = "Hi, I'm Professor Nova. What would you like to learn today?";
+          "Hey! I'm **Professor Nova**, your adaptive AI tutor.\n\n" +
+          "What can I help you with today? You can ask any conceptual question, request code examples, or upload study notes to explore!";
+        initialSpoken = "Hey! I'm Professor Nova. What can I help you with today?";
       } else if ((activeDoc as any).is_demo) {
         const targetTopic = activeConcept?.name || (concepts.length > 0 ? concepts[0].name : activeDoc.title);
         initialText =
@@ -139,7 +147,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
         },
       ]);
       setSpokenText(initialSpoken);
-      playSpeech(initialSpoken);
+      // NOTE: Do not autoplay audio on initial page load; speech starts only on user interaction.
     }
   }, [activeDoc?.id, activeConcept?.name, concepts]);
 
@@ -217,11 +225,27 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
     recognition.start();
   };
 
+  const handleStopGenerating = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsSending(false);
+    setAvatarState('idle');
+  };
+
   const handleSendMessage = async (text: string, mode?: string, lang?: string) => {
     if (!text.trim() || isSending) return;
 
     // Natural interruption if teacher was speaking
     handleInterrupt();
+
+    // Abort any prior in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const currentController = new AbortController();
+    abortControllerRef.current = currentController;
 
     const studentMsg: ChatMessage = {
       id: `msg_${Date.now()}_student`,
@@ -243,7 +267,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
         active_concept: activeDoc ? (activeConcept?.name || (concepts.length > 0 ? concepts[0].name : activeDoc.title)) : (activeConcept?.name || ''),
         mode: mode || 'explain',
         language: lang || activeLanguage,
-      });
+      }, currentController.signal);
 
       const responseReceived = performance.now();
 
@@ -265,7 +289,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
       const spoken = res.spoken_text || res.teacher_text.split('\n')[0].replace(/[*#]/g, '');
 
       if (res.avatar_turn) {
-        const planLatency = res.avatar_turn.backend_avatar_plan_latency_ms || 0.9;
+        const planLatency = res.avatar_turn.backend_avatar_plan_latency_ms || 0;
         const netLatency = Math.max(1.0, Math.round((responseReceived - requestStarted - planLatency) * 10) / 10);
         const renderStart = performance.now();
 
@@ -313,11 +337,27 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
         playSpeech(spoken);
       }
 
-    } catch (err) {
-      console.error(err);
-      setAvatarState('error');
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        console.info('Generation cancelled by user');
+        setAvatarState('idle');
+      } else {
+        console.error('Teacher response failure', err);
+        const errorTeacherMsg: ChatMessage = {
+          id: `msg_${Date.now()}_error`,
+          sender: 'teacher',
+          text: "I encountered an issue connecting to the AI tutor service. Please check your network connection or try again.",
+          timestamp: 'Just now',
+          isError: true,
+          retryText: text,
+        };
+        setMessages((prev) => [...prev, errorTeacherMsg]);
+        setAvatarState('error');
+        setTimeout(() => setAvatarState('idle'), 2500);
+      }
     } finally {
       setIsSending(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -542,6 +582,19 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
                           </button>
                         </div>
                       )}
+
+                      {/* Inline Error Retry Action */}
+                      {msg.isError && msg.retryText && (
+                        <div className="mt-3">
+                          <button
+                            onClick={() => handleSendMessage(msg.retryText!)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium transition-colors shadow-2xs cursor-pointer"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5 text-indigo-300" />
+                            <span>Retry Question</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </div>
                 ) : (
@@ -553,16 +606,26 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
               </div>
             ))}
 
-            {/* Subtle Thinking Activity Indicator */}
+            {/* Subtle Thinking Activity Indicator with Stop action */}
             {isSending && (
-              <div className="flex items-center space-x-2.5 text-xs text-slate-500 py-2">
-                <img
-                  src="/professor_nova.png"
-                  alt="Professor Nova"
-                  className="w-4 h-4 rounded-full object-cover animate-pulse border border-slate-200"
-                />
-                <span className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-ping" />
-                <span>Professor Nova is reasoning...</span>
+              <div className="flex items-center justify-between py-2 px-3.5 rounded-2xl bg-white border border-slate-200/90 shadow-2xs max-w-sm">
+                <div className="flex items-center space-x-2.5 text-xs text-slate-600">
+                  <img
+                    src="/professor_nova.png"
+                    alt="Professor Nova"
+                    className="w-5 h-5 rounded-full object-cover animate-pulse border border-slate-200 shrink-0"
+                  />
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-ping shrink-0" />
+                  <span className="font-medium">Professor Nova is reasoning...</span>
+                </div>
+                <button
+                  onClick={handleStopGenerating}
+                  className="ml-3 px-2 py-0.5 rounded-lg text-[11px] font-medium text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors flex items-center gap-1 cursor-pointer"
+                  title="Stop generating response"
+                >
+                  <Square className="w-3 h-3 fill-current text-slate-400" />
+                  <span>Stop</span>
+                </button>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -577,6 +640,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
               onToggleListening={toggleListening}
               activeLanguage={activeLanguage}
               onChangeLanguage={onChangeLanguage}
+              onOpenDocuments={onOpenDocuments}
             />
           </div>
         </div>
@@ -597,10 +661,10 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
             />
           </div>
         ) : (
-          /* Case B: Professor Nova Adaptive Teacher Stage (Compact & Calm by default, or Expandable Focus Mode) */
+          /* Case B: Professor Nova Adaptive Teacher Stage (Responsive 320-360px default, or Expandable Focus Mode) */
           <div
-            className={`hidden lg:flex flex-col border-l border-slate-200/80 bg-white p-5 transition-all duration-300 ${
-              isFocusTeacher ? 'w-96' : 'w-72'
+            className={`hidden lg:flex flex-col border-l border-slate-200/80 bg-slate-50/50 p-4 sm:p-5 transition-all duration-300 shrink-0 h-full overflow-y-auto overflow-x-hidden ${
+              isFocusTeacher ? 'w-[440px] xl:w-[480px]' : 'w-[340px] xl:w-[360px]'
             }`}
           >
             {/* Professor Nova Adaptive Teacher */}
@@ -622,33 +686,63 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
               onOpenBenchmark={onOpenBenchmark}
             />
 
-            {/* Quiet Lesson Guide */}
-            <div className="mt-5 pt-5 border-t border-slate-100 flex-1 overflow-y-auto">
-              <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider block mb-2 px-1">
-                Lesson Topics
-              </span>
-              <div className="space-y-1">
-                {concepts.slice(0, 5).map((c) => (
-                  <button
-                    key={c.id}
-                    onClick={() => {
-                      onSelectConcept(c);
-                      handleSendMessage(`Let's study ${c.name}.`);
-                    }}
-                    className={`w-full text-left p-2 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer ${
-                      activeConcept?.id === c.id
-                        ? 'bg-slate-100 text-slate-900 font-semibold'
-                        : 'text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span className="truncate max-w-[150px]">{c.name}</span>
-                    <span className="text-[10px] font-mono text-slate-400">
-                      {Math.round(c.mastery_score * 100)}%
-                    </span>
-                  </button>
-                ))}
+            {/* Lesson Topics OR Learning Space Empty State */}
+            {activeDoc && concepts.length > 0 ? (
+              <div className="mt-4 pt-4 border-t border-slate-200/70 flex-1 overflow-y-auto">
+                <div className="flex items-center justify-between mb-2 px-1">
+                  <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">
+                    Lesson Topics ({concepts.length})
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-mono truncate max-w-[120px]">
+                    {activeDoc.title}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {concepts.slice(0, 7).map((c) => (
+                    <button
+                      key={c.id}
+                      onClick={() => {
+                        onSelectConcept(c);
+                        handleSendMessage(`Let's study ${c.name}.`);
+                      }}
+                      className={`w-full text-left p-2.5 rounded-xl text-xs flex items-center justify-between transition-colors cursor-pointer border ${
+                        activeConcept?.id === c.id
+                          ? 'bg-white border-slate-300 text-slate-900 font-semibold shadow-2xs'
+                          : 'bg-white/70 hover:bg-white border-slate-200/60 text-slate-700'
+                      }`}
+                    >
+                      <span className="truncate max-w-[190px]">{c.name}</span>
+                      <span className="text-[10px] font-mono text-slate-400 shrink-0">
+                        {Math.round(c.mastery_score * 100)}%
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="mt-4 pt-4 border-t border-slate-200/70 flex-1">
+                <div className="p-4 rounded-2xl bg-white border border-slate-200/80 shadow-2xs">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="p-1.5 rounded-lg bg-indigo-50 text-indigo-600">
+                      <BookOpen className="w-4 h-4" />
+                    </div>
+                    <span className="text-xs font-semibold text-slate-900">Your Learning Space</span>
+                  </div>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Ask anything freely, explore code examples, or upload study documents to generate a structured curriculum.
+                  </p>
+                  {onOpenDocuments && (
+                    <button
+                      onClick={onOpenDocuments}
+                      className="mt-3 w-full py-2 px-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-indigo-300" />
+                      <span>Open Documents Library</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

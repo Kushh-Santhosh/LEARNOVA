@@ -10,7 +10,8 @@ import {
   Compass,
   BookOpen,
   ChevronDown,
-  Globe
+  Globe,
+  Paperclip
 } from 'lucide-react';
 
 interface ChatComposerProps {
@@ -20,6 +21,7 @@ interface ChatComposerProps {
   onToggleListening: () => void;
   activeLanguage: string;
   onChangeLanguage: (lang: string) => void;
+  onOpenDocuments?: () => void;
 }
 
 export const ChatComposer: React.FC<ChatComposerProps> = ({
@@ -29,6 +31,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   onToggleListening,
   activeLanguage,
   onChangeLanguage,
+  onOpenDocuments,
 }) => {
   const [text, setText] = useState('');
   const [selectedStyle, setSelectedStyle] = useState('explain');
@@ -45,6 +48,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   ];
 
   const tools = [
+    ...(onOpenDocuments ? [{ id: 'open_doc', label: 'Open Documents Library', icon: BookOpen, prompt: '', isDocAction: true }] : []),
     { id: 'quiz', label: 'Comprehension Quiz', icon: HelpCircle, prompt: 'Quiz me on this concept to test my understanding.' },
     { id: 'teach_back', label: 'Teach-Back Challenge', icon: Award, prompt: 'Challenge me to teach this concept back to you.' },
     { id: 'visual', label: 'Generate Visual Diagram', icon: Layers, prompt: 'Create a visual diagram or flowchart comparing the key mechanisms.' },
@@ -85,8 +89,12 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
     }
   };
 
-  const handleSelectTool = (tool: typeof tools[0]) => {
+  const handleSelectTool = (tool: any) => {
     setShowTools(false);
+    if (tool.isDocAction && onOpenDocuments) {
+      onOpenDocuments();
+      return;
+    }
     onSendMessage(tool.prompt, tool.id, activeLanguage);
   };
 
@@ -165,6 +173,17 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
             >
               <Plus className="w-4 h-4" />
             </button>
+
+            {/* Document Library Button */}
+            {onOpenDocuments && (
+              <button
+                onClick={onOpenDocuments}
+                className="p-1.5 text-slate-500 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors cursor-pointer"
+                title="Open Documents Library & Uploaded Notes"
+              >
+                <Paperclip className="w-4 h-4" />
+              </button>
+            )}
 
             {/* Audio Speech Mic Button */}
             <button

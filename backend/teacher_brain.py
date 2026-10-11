@@ -215,7 +215,7 @@ class TeacherBrain:
 
         # A. GREETING / SMALL TALK (Instant response, <1ms)
         if intent == ConversationIntent.GREETING:
-            return intent_router.get_greeting_response(language=detected_lang)
+            return intent_router.get_greeting_response(message=student_message, language=detected_lang)
 
         # B. RESEARCH REQUEST
         if intent == ConversationIntent.RESEARCH:

@@ -285,6 +285,7 @@ export function App() {
             }}
             onOpenMobileNav={() => setIsMobileNavOpen(true)}
             onOpenBenchmark={() => setIsBenchmarkOpen(true)}
+            onOpenDocuments={() => setActiveTab('documents')}
           />
         )}
 
