@@ -69,6 +69,8 @@ export const api = {
     active_concept?: string;
     mode?: string;
     language?: string;
+    attached_doc_ids?: string[];
+    research_mode?: boolean;
   }, signal?: AbortSignal): Promise<TeacherResponse> {
     const res = await fetch(`${API_BASE}/teach`, {
       method: 'POST',

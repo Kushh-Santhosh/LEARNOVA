@@ -36,7 +36,10 @@ import {
   BookOpen,
   FileText,
   RefreshCw,
-  Square
+  Square,
+  Download,
+  Printer,
+  Search
 } from 'lucide-react';
 
 import { AvatarTurn } from '../types';
@@ -53,6 +56,13 @@ interface ClassroomWorkspaceProps {
   onOpenDocuments?: () => void;
 }
 
+interface ChatMessageAttachment {
+  name: string;
+  size: number;
+  formattedSize: string;
+  type?: string;
+}
+
 interface ChatMessage {
   id: string;
   sender: 'teacher' | 'student';
@@ -65,6 +75,8 @@ interface ChatMessage {
   timestamp: string;
   isError?: boolean;
   retryText?: string;
+  attachments?: ChatMessageAttachment[];
+  isDeepResearch?: boolean;
 }
 
 export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
@@ -97,9 +109,11 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
   const [activeQuiz, setActiveQuiz] = useState<QuizItem | null>(null);
   const [isTeachBackOpen, setIsTeachBackOpen] = useState(false);
   const [isVoiceSettingsOpen, setIsVoiceSettingsOpen] = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState<string>('');
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const attachedDocIdsRef = useRef<string[]>([]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -200,29 +214,70 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
 
     const recognition = new SpeechRecognition();
     recognition.continuous = false;
-    recognition.interimResults = false;
-    recognition.lang = activeLanguage === 'kn' ? 'kn-IN' : activeLanguage === 'hi' ? 'hi-IN' : 'en-US';
+    recognition.interimResults = true;
+    recognition.maxAlternatives = 1;
+    recognition.lang =
+      activeLanguage === 'kn'
+        ? 'kn-IN'
+        : activeLanguage === 'hi'
+        ? 'hi-IN'
+        : activeLanguage === 'te'
+        ? 'te-IN'
+        : activeLanguage === 'ta'
+        ? 'ta-IN'
+        : 'en-US';
+
+    let finalTranscript = '';
 
     recognition.onstart = () => {
       setIsListening(true);
+      setLiveTranscript('');
       setAvatarState('listening');
     };
     recognition.onresult = (event: any) => {
-      const transcript = event.results[0][0].transcript;
-      setIsListening(false);
-      setAvatarState('thinking');
-      handleSendMessage(transcript);
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; ++i) {
+        if (event.results[i].isFinal) {
+          finalTranscript += event.results[i][0].transcript;
+        } else {
+          interim += event.results[i][0].transcript;
+        }
+      }
+      setLiveTranscript(interim || finalTranscript);
     };
     recognition.onerror = () => {
       setIsListening(false);
+      setLiveTranscript('');
       setAvatarState('idle');
     };
     recognition.onend = () => {
       setIsListening(false);
-      if (!isSending) setAvatarState('idle');
+      const textToSubmit = finalTranscript.trim() || liveTranscript.trim();
+      setLiveTranscript('');
+      if (textToSubmit) {
+        setAvatarState('thinking');
+        handleSendMessage(textToSubmit);
+      } else if (!isSending) {
+        setAvatarState('idle');
+      }
     };
 
     recognition.start();
+  };
+
+  const handleExportMarkdown = (title: string, content: string) => {
+    const safeTitle = (title || 'deep_research').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${safeTitle}.md`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrintPdf = () => {
+    window.print();
   };
 
   const handleStopGenerating = () => {
@@ -234,8 +289,15 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
     setAvatarState('idle');
   };
 
-  const handleSendMessage = async (text: string, mode?: string, lang?: string) => {
-    if (!text.trim() || isSending) return;
+  const handleSendMessage = async (
+    text: string,
+    mode?: string,
+    lang?: string,
+    attachedFiles?: File[],
+    researchMode?: boolean
+  ) => {
+    if (!text.trim() && (!attachedFiles || attachedFiles.length === 0)) return;
+    if (isSending) return;
 
     // Natural interruption if teacher was speaking
     handleInterrupt();
@@ -247,11 +309,22 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
     const currentController = new AbortController();
     abortControllerRef.current = currentController;
 
+    const attachmentPreviews = (attachedFiles || []).map((f) => ({
+      name: f.name,
+      size: f.size,
+      formattedSize:
+        f.size < 1024 * 1024
+          ? `${(f.size / 1024).toFixed(1)} KB`
+          : `${(f.size / (1024 * 1024)).toFixed(1)} MB`,
+      type: f.type,
+    }));
+
     const studentMsg: ChatMessage = {
       id: `msg_${Date.now()}_student`,
       sender: 'student',
       text: text,
       timestamp: 'Just now',
+      attachments: attachmentPreviews.length > 0 ? attachmentPreviews : undefined,
     };
 
     setMessages((prev) => [...prev, studentMsg]);
@@ -261,13 +334,41 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
     const requestStarted = performance.now();
 
     try {
-      const res: TeacherResponse = await api.teach({
-        document_id: activeDoc?.id || 'general_learning',
-        message: text,
-        active_concept: activeDoc ? (activeConcept?.name || (concepts.length > 0 ? concepts[0].name : activeDoc.title)) : (activeConcept?.name || ''),
-        mode: mode || 'explain',
-        language: lang || activeLanguage,
-      }, currentController.signal);
+      // If inline files are attached, upload and register them
+      if (attachedFiles && attachedFiles.length > 0) {
+        for (const file of attachedFiles) {
+          try {
+            const uploadRes = await api.uploadDocument(file);
+            if (
+              uploadRes?.document?.id &&
+              !attachedDocIdsRef.current.includes(uploadRes.document.id)
+            ) {
+              attachedDocIdsRef.current.push(uploadRes.document.id);
+            }
+          } catch (uploadErr) {
+            console.error('Error uploading inline document', uploadErr);
+          }
+        }
+      }
+
+      const effectiveDocId =
+        activeDoc?.id || (attachedDocIdsRef.current[0] || 'general_learning');
+
+      const res: TeacherResponse = await api.teach(
+        {
+          document_id: effectiveDocId,
+          message: text,
+          active_concept: activeDoc
+            ? activeConcept?.name || (concepts.length > 0 ? concepts[0].name : activeDoc.title)
+            : activeConcept?.name || '',
+          mode: mode || (researchMode ? 'deep_research' : 'explain'),
+          language: lang || activeLanguage,
+          attached_doc_ids:
+            attachedDocIdsRef.current.length > 0 ? attachedDocIdsRef.current : undefined,
+          research_mode: Boolean(researchMode || mode === 'deep_research'),
+        },
+        currentController.signal
+      );
 
       const responseReceived = performance.now();
 
@@ -316,6 +417,12 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
         });
       }
 
+      const isDeepReport =
+        res.is_deep_research ||
+        res.teaching_mode === 'deep_research' ||
+        researchMode ||
+        res.teacher_text.startsWith('# Deep Research');
+
       const teacherMsg: ChatMessage = {
         id: `msg_${Date.now()}_teacher`,
         sender: 'teacher',
@@ -326,6 +433,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
         artifact: artifact,
         citations: res.citations,
         timestamp: 'Just now',
+        isDeepResearch: isDeepReport,
       };
 
       setMessages((prev) => [...prev, teacherMsg]);
@@ -539,6 +647,36 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
                         <span className="text-[10px] text-slate-400 font-normal">AI Teacher</span>
                       </div>
 
+                      {/* Deep Research Header & Export Bar */}
+                      {msg.isDeepResearch && (
+                        <div className="mb-3 p-2.5 rounded-2xl bg-indigo-50/80 border border-indigo-200/70 text-indigo-950 text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs animate-fadeIn">
+                          <div className="flex items-center gap-1.5 font-semibold text-indigo-900">
+                            <Search className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span>Deep Academic Research Report</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleExportMarkdown('Deep_Research_Notes', msg.text)}
+                              className="px-2.5 py-1 rounded-lg bg-white border border-indigo-200 hover:bg-indigo-100/50 text-[11px] font-medium text-indigo-800 flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                              title="Download Markdown Study Guide"
+                            >
+                              <Download className="w-3 h-3" />
+                              <span>Export .md</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handlePrintPdf}
+                              className="px-2.5 py-1 rounded-lg bg-white border border-indigo-200 hover:bg-indigo-100/50 text-[11px] font-medium text-indigo-800 flex items-center gap-1 transition-colors cursor-pointer shadow-2xs"
+                              title="Print or Save as PDF"
+                            >
+                              <Printer className="w-3 h-3" />
+                              <span>Print / PDF</span>
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
                       {/* Conversational Text rendered with safe Markdown */}
                       <div className="text-sm text-slate-800 font-normal leading-relaxed">
                         <MarkdownRenderer content={msg.text} />
@@ -599,8 +737,24 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
                   </div>
                 ) : (
                   /* Student Message: Clean, restrained, right-aligned */
-                  <div className="max-w-[85%] sm:max-w-[75%] rounded-2xl px-4 py-3 bg-slate-200/80 text-slate-900 text-sm font-normal leading-relaxed">
-                    {msg.text}
+                  <div className="max-w-[85%] sm:max-w-[75%] flex flex-col items-end gap-1.5">
+                    {msg.attachments && msg.attachments.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 justify-end">
+                        {msg.attachments.map((att, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-700 shadow-2xs"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                            <span className="font-medium truncate max-w-[150px]">{att.name}</span>
+                            <span className="text-[10px] text-slate-400">({att.formattedSize})</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="rounded-2xl px-4 py-3 bg-slate-200/80 text-slate-900 text-sm font-normal leading-relaxed">
+                      {msg.text}
+                    </div>
                   </div>
                 )}
               </div>
@@ -641,6 +795,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
               activeLanguage={activeLanguage}
               onChangeLanguage={onChangeLanguage}
               onOpenDocuments={onOpenDocuments}
+              liveTranscript={liveTranscript}
             />
           </div>
         </div>

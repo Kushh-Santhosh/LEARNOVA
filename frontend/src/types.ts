@@ -81,7 +81,7 @@ export interface TeacherResponse {
   intent?: string;
   spoken_text?: string;
   teacher_text: string;
-  teaching_mode: 'explain' | 'simplify' | 'example' | 'analogy' | 'visual' | 'deep_dive' | 'socratic' | 'exam' | 'remediate';
+  teaching_mode: 'explain' | 'simplify' | 'example' | 'analogy' | 'visual' | 'deep_dive' | 'socratic' | 'exam' | 'remediate' | 'deep_research' | 'research' | 'multi_doc' | string;
   active_concept: string;
   misconception_detected: MisconceptionDiagnosis | null;
   visual_element: VisualPayload | null;
@@ -89,6 +89,7 @@ export interface TeacherResponse {
   follow_up_prompt?: string;
   language?: string;
   avatar_turn?: AvatarTurn;
+  is_deep_research?: boolean;
 }
 
 export type RhubarbVisemeShape = 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'X';

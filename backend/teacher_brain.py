@@ -194,7 +194,9 @@ class TeacherBrain:
         student_message: str,
         active_concept: str = "",
         mode: str = "explain",
-        language: str = "en"
+        language: str = "en",
+        attached_doc_ids: Optional[List[str]] = None,
+        research_mode: bool = False
     ) -> Dict[str, Any]:
         """
         Main teaching loop:
@@ -204,6 +206,14 @@ class TeacherBrain:
         4. Centralized LLM Generation with bounded fallback
         """
         detected_lang = self.detect_language(student_message, language)
+
+        # Priority Check: Explicit Deep Research Mode
+        if research_mode or mode in ("deep_research", "research"):
+            return await web_research_service.deep_research(
+                goal=student_message,
+                llm_caller=self.call_llm,
+                lang=detected_lang
+            )
 
         # 0. Intent Routing — fast bypass before any heavy operation
         classification = intent_router.classify(
@@ -219,11 +229,22 @@ class TeacherBrain:
 
         # B. RESEARCH REQUEST
         if intent == ConversationIntent.RESEARCH:
-            res_result = await web_research_service.research(
+            return await web_research_service.deep_research(
                 goal=student_message,
-                llm_caller=self.call_llm
+                llm_caller=self.call_llm,
+                lang=detected_lang
             )
-            return self._build_research_decision(student_message, res_result, detected_lang)
+
+        # Process attached document IDs if passed directly in the chat request
+        valid_attached_docs = [
+            d for d in (attached_doc_ids or [])
+            if d and d not in ("none", "null", "general_learning") and d in retriever.doc_chunks
+        ]
+        if valid_attached_docs:
+            if len(valid_attached_docs) >= 2 or any(k in student_message.lower() for k in ["compare", "both", "difference", "versus", "vs"]):
+                return await self._handle_multi_doc_query(student_message, valid_attached_docs, detected_lang)
+            else:
+                doc_id = valid_attached_docs[0]
 
         # Determine if we are in general conversation mode
         is_general_mode = (
@@ -406,9 +427,15 @@ class TeacherBrain:
                 "SPOKEN: [1-2 concise, clear sentences for the avatar voice]\n"
                 "EXPLANATION: [Structured, engaging explanation with bullet points and key takeaways]"
             )
+            context_excerpts = "\n\n".join([
+                f"Page {c.get('page', 1)} [{c.get('section', 'Section')}]: {c.get('excerpt', '')}"
+                for c in citations if c.get('excerpt')
+            ])
+            if not context_excerpts:
+                context_excerpts = primary_chunk.get('content', '')[:1500]
             prompt = (
                 f"Concept: {active_concept}\n"
-                f"Curriculum excerpt:\n{primary_chunk.get('content', '')[:1000]}\n\n"
+                f"Curriculum excerpt:\n{context_excerpts[:2500]}\n\n"
                 f"Student asks: {student_message}\n"
                 f"Pedagogical mode: {mode}\n"
                 f"Language target: {lang}\n"

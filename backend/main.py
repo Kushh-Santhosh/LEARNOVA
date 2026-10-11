@@ -194,6 +194,8 @@ class TeachRequest(BaseModel):
     active_concept: Optional[str] = None   # resolved server-side; no hardcoded demo default
     mode: Optional[str] = "explain"
     language: Optional[str] = "en"
+    attached_doc_ids: Optional[List[str]] = None
+    research_mode: Optional[bool] = False
 
 class QuizGenerateRequest(BaseModel):
     document_id: str
@@ -458,7 +460,9 @@ async def teach_interaction(req: TeachRequest):
         student_message=req.message,
         active_concept=active_concept,
         mode=req.mode or "explain",
-        language=req.language or "en"
+        language=req.language or "en",
+        attached_doc_ids=req.attached_doc_ids,
+        research_mode=req.research_mode or (req.mode == "deep_research")
     )
     if isinstance(result, dict):
         text_to_speak = result.get("spoken_text") or result.get("teacher_text", "")
