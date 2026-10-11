@@ -277,6 +277,109 @@ class DocumentProcessor:
         return sections, chunks
 
     @classmethod
+    def extract_from_code(cls, raw_code: str, doc_id: str, filename: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Extract structured sections and chunks from source code (.c, .h, .cpp, .hpp, .py, .java)."""
+        text = cls.sanitize_text(raw_code)
+        lines = text.split("\n")
+        sections: List[Dict[str, Any]] = []
+        chunks: List[Dict[str, Any]] = []
+        current_section = f"{filename} Overview"
+        current_page = 1
+        buffer: List[str] = []
+
+        func_re = re.compile(
+            r"^(?:[A-Za-z0-9_*\s]+\s+)?([A-Za-z0-9_]+)\s*\([^)]*\)\s*(?:const)?\s*(?:\{|:)?$|"
+            r"^(?:def|class)\s+([A-Za-z0-9_]+)\b",
+            re.MULTILINE
+        )
+
+        for line_idx, line in enumerate(lines):
+            if line_idx > 0 and line_idx % 50 == 0:
+                current_page += 1
+
+            stripped = line.strip()
+            match = func_re.match(stripped)
+            if match and not stripped.startswith(("//", "/*", "*", "#", "return", "if", "for", "while")):
+                fn_name = match.group(1) or match.group(2)
+                if fn_name and len(fn_name) > 1 and fn_name not in ("if", "for", "while", "switch", "catch"):
+                    if buffer:
+                        chunk_content = "\n".join(buffer).strip()
+                        if len(chunk_content) > 10:
+                            chunks.append({
+                                "chunk_id": f"chk_{doc_id}_{len(chunks)+1}",
+                                "document_id": doc_id,
+                                "page_number": current_page,
+                                "section": current_section,
+                                "content": chunk_content,
+                                "source_type": "code"
+                            })
+                        buffer = []
+                    current_section = f"{fn_name}() in {filename}" if not stripped.startswith("class") else f"Class {fn_name}"
+                    sections.append({
+                        "id": f"sec_{len(sections)+1}",
+                        "title": current_section,
+                        "page": current_page
+                    })
+
+            buffer.append(line)
+            if len("\n".join(buffer)) > 800:
+                chunks.append({
+                    "chunk_id": f"chk_{doc_id}_{len(chunks)+1}",
+                    "document_id": doc_id,
+                    "page_number": current_page,
+                    "section": current_section,
+                    "content": "\n".join(buffer).strip(),
+                    "source_type": "code"
+                })
+                buffer = []
+
+        if buffer:
+            chunks.append({
+                "chunk_id": f"chk_{doc_id}_{len(chunks)+1}",
+                "document_id": doc_id,
+                "page_number": current_page,
+                "section": current_section,
+                "content": "\n".join(buffer).strip(),
+                "source_type": "code"
+            })
+
+        return sections, chunks
+
+    @classmethod
+    def extract_from_csv(cls, raw_csv: str, doc_id: str, filename: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Extract structured tabular chunks from CSV."""
+        text = cls.sanitize_text(raw_csv)
+        lines = [l.strip() for l in text.split("\n") if l.strip()]
+        sections: List[Dict[str, Any]] = []
+        chunks: List[Dict[str, Any]] = []
+        if not lines:
+            return sections, chunks
+
+        header = lines[0]
+        current_section = f"{filename} Data Table"
+        sections.append({"id": "sec_1", "title": current_section, "page": 1})
+
+        rows_per_chunk = 15
+        data_rows = lines[1:]
+        current_page = 1
+
+        for i in range(0, max(len(data_rows), 1), rows_per_chunk):
+            chunk_rows = data_rows[i:i + rows_per_chunk]
+            content = f"Columns: {header}\n" + "\n".join(chunk_rows)
+            chunks.append({
+                "chunk_id": f"chk_{doc_id}_{len(chunks)+1}",
+                "document_id": doc_id,
+                "page_number": current_page,
+                "section": current_section,
+                "content": content,
+                "source_type": "csv"
+            })
+            if len(chunks) % 3 == 0:
+                current_page += 1
+
+        return sections, chunks
+
+    @classmethod
     def extract_concepts_and_graph(cls, chunks: List[Dict[str, Any]], title: str) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         Builds a structured knowledge graph (nodes + relationships) for arbitrary documents.

@@ -42,8 +42,8 @@ class LearnerState:
         self.recent_activity: List[Dict[str, Any]] = [
             {"time": "Just now", "action": "Initialized LEARNOVA Workspace", "type": "system"}
         ]
-        self.active_doc_id: str = "doc_networks_osi_101"
-        self.active_doc_title: str = "Computer Networks: Principles & Architecture"
+        self.active_doc_id: Optional[str] = None
+        self.active_doc_title: str = ""
 
     def set_active_document(self, doc_id: str, doc_title: str, concepts: Optional[List[Dict[str, Any]]] = None):
         self.active_doc_id = doc_id

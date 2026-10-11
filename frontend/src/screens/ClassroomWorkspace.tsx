@@ -19,6 +19,7 @@ import { TeachBackModal } from '../components/TeachBackModal';
 import { VoiceSettingsModal } from '../components/voice/VoiceSettingsModal';
 import { voiceSynthesis } from '../services/voiceSynthesis';
 import { api } from '../api';
+import { MarkdownRenderer } from '../components/MarkdownRenderer';
 import {
   AlertTriangle,
   Lightbulb,
@@ -107,15 +108,11 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
       let initialSpoken = '';
 
       if (!activeDoc) {
-        // General learning mode — no document required
+        // General conversational AI tutor mode — clean initial greeting
         initialText =
-          "Hi! I'm **Professor Nova**, your adaptive AI teacher.\n\n" +
-          "You haven't uploaded a document yet — that's perfectly fine! You can:\n" +
-          "• Type any topic: **\"I want to learn Python\"**, **\"Teach me C++\"**, **\"Explain machine learning\"**\n" +
-          "• Ask for a **learning roadmap** for any subject\n" +
-          "• **Upload a document** from the Documents tab and I'll teach it to you\n\n" +
-          "What would you like to learn today?";
-        initialSpoken = "Hi, I'm Professor Nova. What would you like to learn today? Just tell me the subject.";
+          "Hi! I'm **Professor Nova**, your adaptive AI tutor.\n\n" +
+          "What would you like to learn today? You can ask any question, request code, or upload documents to explore!";
+        initialSpoken = "Hi, I'm Professor Nova. What would you like to learn today?";
       } else if ((activeDoc as any).is_demo) {
         const targetTopic = activeConcept?.name || (concepts.length > 0 ? concepts[0].name : activeDoc.title);
         initialText =
@@ -241,11 +238,9 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
 
     try {
       const res: TeacherResponse = await api.teach({
-        // Use 'general_learning' when no document is loaded so the backend
-        // knows to answer from general knowledge, not a specific doc.
         document_id: activeDoc?.id || 'general_learning',
         message: text,
-        active_concept: activeConcept?.name || (concepts.length > 0 ? concepts[0].name : activeDoc?.title) || '',
+        active_concept: activeDoc ? (activeConcept?.name || (concepts.length > 0 ? concepts[0].name : activeDoc.title)) : (activeConcept?.name || ''),
         mode: mode || 'explain',
         language: lang || activeLanguage,
       });
@@ -504,9 +499,9 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
                         <span className="text-[10px] text-slate-400 font-normal">AI Teacher</span>
                       </div>
 
-                      {/* Conversational Text */}
-                      <div className="text-sm text-slate-800 font-normal leading-relaxed whitespace-pre-line">
-                        {msg.text}
+                      {/* Conversational Text rendered with safe Markdown */}
+                      <div className="text-sm text-slate-800 font-normal leading-relaxed">
+                        <MarkdownRenderer content={msg.text} />
                       </div>
 
                       {/* Citations Pill Bar (Quiet metadata) */}

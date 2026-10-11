@@ -29,8 +29,10 @@ load_env()
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+import json
 import httpx
 from document_processor import DocumentProcessor
 from embeddings_retriever import retriever
@@ -40,6 +42,7 @@ from teachback_evaluator import teachback_evaluator
 from learner_state import learner_state
 from voice_provider import voice_service, livekit_is_configured, generate_livekit_token, test_livekit_connection
 from openrouter_router import openrouter_router
+from llm_router import llm_router
 from demo_data import (
     DEMO_DOCUMENT_ID,
     DEMO_DOCUMENT_TITLE,
@@ -135,16 +138,25 @@ kg_set(DEMO_DOCUMENT_ID, DEMO_CONCEPTS, DEMO_RELATIONSHIPS)
 _uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
 if os.path.exists(_uploads_dir):
     for _fname in sorted(os.listdir(_uploads_dir)):
-        if _fname.endswith((".pdf", ".docx", ".txt", ".md")) and not _fname.startswith("."):
+        _ext = os.path.splitext(_fname)[1].lower()
+        if _ext in [".pdf", ".docx", ".txt", ".md", ".csv", ".c", ".h", ".cpp", ".hpp", ".py", ".java"] and not _fname.startswith("."):
             _fpath = os.path.join(_uploads_dir, _fname)
             try:
                 _doc_id = f"doc_{os.path.splitext(_fname)[0]}"
-                if _fname.endswith(".pdf"):
+                if _ext == ".pdf":
                     _secs, _chks = DocumentProcessor.extract_from_pdf(_fpath, _doc_id)
                     _ftype = "pdf"
-                elif _fname.endswith(".docx"):
+                elif _ext in [".docx", ".doc"]:
                     _secs, _chks = DocumentProcessor.extract_from_docx(_fpath, _doc_id)
                     _ftype = "docx"
+                elif _ext in [".c", ".h", ".cpp", ".hpp", ".py", ".java"]:
+                    with open(_fpath, "r", encoding="utf-8", errors="ignore") as _f:
+                        _secs, _chks = DocumentProcessor.extract_from_code(_f.read(), _doc_id, _fname)
+                    _ftype = "code"
+                elif _ext == ".csv":
+                    with open(_fpath, "r", encoding="utf-8", errors="ignore") as _f:
+                        _secs, _chks = DocumentProcessor.extract_from_csv(_f.read(), _doc_id, _fname)
+                    _ftype = "csv"
                 else:
                     with open(_fpath, "r", encoding="utf-8", errors="ignore") as _f:
                         _secs, _chks = DocumentProcessor.extract_from_text(_f.read(), _doc_id, _fname)
@@ -215,9 +227,14 @@ def health():
         "active_documents": len(DOCUMENTS),
         "voice_capabilities": voice_service.get_voice_capabilities(),
         "avatar_mode": "liveavatar" if os.getenv("HEYGEN_API_KEY") else "fallback",
-        "llm_gateway": openrouter_router.get_status(),
+        "llm_gateway": llm_router.get_status(),
         "persistence": supabase_service.get_status()
     }
+
+@app.get("/api/providers/health")
+def get_providers_health():
+    """Safe diagnostic reporting provider status and health without credentials."""
+    return llm_router.get_status()
 
 @app.get("/api/providers/status")
 async def get_providers_status():
@@ -225,7 +242,7 @@ async def get_providers_status():
     Returns automated provider health and billing safety status.
     Guarantees cost is strictly FREE ($0.00).
     """
-    router_status = openrouter_router.get_status()
+    router_status = llm_router.get_status()
     has_livekit = bool(os.getenv("LIVEKIT_URL") and os.getenv("LIVEKIT_API_KEY"))
     has_liveavatar = bool(os.getenv("HEYGEN_API_KEY"))
     supabase_status = supabase_service.get_status()
@@ -364,6 +381,16 @@ async def upload_document(file: UploadFile = File(...)):
     elif file_ext in [".docx", ".doc"]:
         sections, chunks = DocumentProcessor.extract_from_docx(file_path, doc_id)
         file_type = "docx"
+    elif file_ext in [".c", ".h", ".cpp", ".hpp", ".py", ".java"]:
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        sections, chunks = DocumentProcessor.extract_from_code(content, doc_id, filename)
+        file_type = "code"
+    elif file_ext == ".csv":
+        with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+            content = f.read()
+        sections, chunks = DocumentProcessor.extract_from_csv(content, doc_id, filename)
+        file_type = "csv"
     else:
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
             content = f.read()
@@ -415,19 +442,19 @@ def get_concept_details(doc_id: str, concept_id: str):
 @app.post("/api/teach")
 async def teach_interaction(req: TeachRequest):
     """Core AI teacher conversation loop with adaptive teaching, visual artifacts, and multilingual support."""
+    doc_id = req.document_id if req.document_id not in ("none", "null") else "general_learning"
     active_concept = req.active_concept
-    if not active_concept:
-        doc_meta = DOCUMENTS.get(req.document_id)
-        if doc_meta:
-            # Use the document title as the concept anchor
+
+    # If general learning or no concept passed, do not force demo concept
+    if not active_concept or doc_id == "general_learning":
+        doc_meta = DOCUMENTS.get(doc_id)
+        if doc_meta and not doc_meta.get("is_demo"):
             active_concept = doc_meta["title"]
         else:
-            # No document loaded — derive concept from the user's own message
-            # This is the GENERAL_LEARNING path; teacher_brain will handle it
-            active_concept = req.message[:80]
+            active_concept = ""
 
     result = await teacher_brain.interact(
-        doc_id=req.document_id,
+        doc_id=doc_id,
         student_message=req.message,
         active_concept=active_concept,
         mode=req.mode or "explain",
@@ -435,13 +462,28 @@ async def teach_interaction(req: TeachRequest):
     )
     if isinstance(result, dict):
         text_to_speak = result.get("spoken_text") or result.get("teacher_text", "")
-        if text_to_speak:
+        if text_to_speak and not result.get("avatar_turn"):
             result["avatar_turn"] = await avatar_engine.orchestrate_turn(
                 text=text_to_speak,
                 emotion=result.get("emotion") or result.get("pedagogical_phase"),
                 language=req.language or "en"
             )
     return result
+
+@app.post("/api/teach/stream")
+async def teach_stream(req: TeachRequest):
+    """Streams response chunks using fastest available provider."""
+    prompt = f"Student asks: {req.message}"
+    system_prompt = (
+        "You are Professor Nova, an advanced, calm, male AI teacher in LEARNOVA. "
+        "Answer the student with clarity and structured formatting."
+    )
+    async def event_generator():
+        async for chunk in llm_router.stream_completion(prompt, system_prompt):
+            yield f"data: {json.dumps({'chunk': chunk})}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 

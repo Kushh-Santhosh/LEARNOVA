@@ -267,6 +267,61 @@ class WebResearchService:
                 "why": "Widely recognized community standard for step-by-step C++ pedagogy",
             },
         ],
+        "ai": [
+            {
+                "title": "arXiv Computer Science: Artificial Intelligence",
+                "url": "https://arxiv.org/list/cs.AI/recent",
+                "snippet": "Open-access archive for scholarly articles and preprints in artificial intelligence research.",
+                "domain": "arxiv.org",
+                "why": "Premier open-access repository for state-of-the-art AI research publications",
+            },
+            {
+                "title": "Google DeepMind Research Publications",
+                "url": "https://deepmind.google/research/",
+                "snippet": "Groundbreaking research papers across frontier artificial intelligence models and safety.",
+                "domain": "deepmind.google",
+                "why": "Pioneering industry research across transformers, reasoning, and multimodal architectures",
+            },
+            {
+                "title": "Stanford HAI — Artificial Intelligence Index",
+                "url": "https://hai.stanford.edu/research/ai-index-report",
+                "snippet": "Annual comprehensive report on the state of AI technical advancements, benchmarks, and ethics.",
+                "domain": "stanford.edu",
+                "why": "Authoritative annual academic benchmark on global AI advancements and capabilities",
+            },
+        ],
+        "machine learning": [
+            {
+                "title": "arXiv: Learning (cs.LG) Preprints",
+                "url": "https://arxiv.org/list/cs.LG/recent",
+                "snippet": "Recent machine learning research publications covering algorithms, neural networks, and optimization.",
+                "domain": "arxiv.org",
+                "why": "Leading source for cutting-edge machine learning and deep learning papers",
+            },
+            {
+                "title": "Scikit-Learn Machine Learning in Python",
+                "url": "https://scikit-learn.org/stable/",
+                "snippet": "Simple and efficient tools for predictive data analysis and machine learning algorithms.",
+                "domain": "scikit-learn.org",
+                "why": "Industry and academic benchmark library for classical machine learning algorithms",
+            },
+        ],
+        "cloud": [
+            {
+                "title": "AWS Architecture Center",
+                "url": "https://aws.amazon.com/architecture/",
+                "snippet": "Reference architecture diagrams, best practices, and patterns for cloud workloads.",
+                "domain": "aws.amazon.com",
+                "why": "Official cloud architecture documentation and reference designs",
+            },
+            {
+                "title": "Google Cloud Architecture Framework",
+                "url": "https://cloud.google.com/architecture/framework",
+                "snippet": "Guidance and best practices for building scalable, secure, and resilient cloud systems.",
+                "domain": "cloud.google.com",
+                "why": "Authoritative cloud architectural framework for modern scalable deployments",
+            },
+        ],
     }
 
     def _build_resources(
@@ -309,6 +364,35 @@ class WebResearchService:
                             estimated_time="1-2 hours",
                             topic=goal,
                         ))
+
+        if not resources:
+            default_research = [
+                {
+                    "title": "arXiv.org Open Research Repository",
+                    "url": "https://arxiv.org/",
+                    "snippet": f"Open access archive for scholarly research across computer science and related fields regarding {goal}.",
+                    "domain": "arxiv.org",
+                    "why": "Global open-access archive for peer-reviewed preprints and research",
+                },
+                {
+                    "title": "MIT OpenCourseWare & Research",
+                    "url": "https://ocw.mit.edu/",
+                    "snippet": f"Peer-reviewed academic materials and curriculum regarding {goal}.",
+                    "domain": "ocw.mit.edu",
+                    "why": "Top-tier academic research and instructional materials",
+                }
+            ]
+            for v in default_research:
+                resources.append(LearningResource(
+                    title=v["title"],
+                    url=v["url"],
+                    source=v["domain"],
+                    description=v["snippet"],
+                    why_recommended=v["why"],
+                    difficulty="intermediate",
+                    estimated_time="2-3 hours",
+                    topic=goal
+                ))
                 break
 
         return resources

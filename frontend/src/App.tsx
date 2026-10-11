@@ -151,11 +151,7 @@ export function App() {
     try {
       const docs = await api.getDocuments();
       setDocuments(docs);
-      if (docs.length > 0) {
-        const firstId = docs[0].id;
-        setActiveDocId(firstId);
-        loadGraph(firstId);
-      }
+      // Do not auto-select first demo doc; fresh session starts as conversational AI tutor
     } catch (e) {
       console.error('Failed to load documents', e);
     }

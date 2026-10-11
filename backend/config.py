@@ -43,7 +43,11 @@ class Settings:
         # LLM Gateway
         self.OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "").strip()
         self.OPENROUTER_MODEL: str = os.getenv("OPENROUTER_MODEL", "").strip()
-        self.GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "").strip()
+        self.GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "").strip()
+        self.GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", self.GOOGLE_API_KEY).strip()
+        self.GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "models/gemini-flash-latest").strip()
+        self.OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "").strip()
+        self.OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
 
         # Database / Persistence
         self.SUPABASE_URL: str = os.getenv("SUPABASE_URL", "").strip()
@@ -61,6 +65,14 @@ class Settings:
 
         # Cost Targets (₹ INR)
         self.TARGET_COST_PER_MIN_INR: float = 10.0
+
+    @property
+    def has_gemini(self) -> bool:
+        return bool(self.GEMINI_API_KEY)
+
+    @property
+    def has_openai(self) -> bool:
+        return bool(self.OPENAI_API_KEY)
 
     @property
     def has_openrouter(self) -> bool:

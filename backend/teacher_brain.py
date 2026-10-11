@@ -13,11 +13,14 @@ from learner_state import learner_state
 from demo_data import DEMO_CHUNKS, DEMO_COMMON_MISCONCEPTIONS
 
 from openrouter_router import openrouter_router
+from llm_router import llm_router
+from intent_router import intent_router, ConversationIntent
+from services.web_research import web_research_service
 
 class TeacherBrain:
     async def call_llm(self, prompt: str, system_prompt: str = "") -> Optional[Dict[str, Any]]:
-        """Calls the free-only OpenRouter gateway."""
-        return await openrouter_router.generate_completion(prompt=prompt, system_prompt=system_prompt)
+        """Calls the centralized LLM router (Gemini -> OpenAI -> OpenRouter free)."""
+        return await llm_router.generate_completion(prompt=prompt, system_prompt=system_prompt)
 
     def detect_language(self, text: str, user_preference: Optional[str] = None) -> str:
         """Detects language script or explicit user requests ('in Kannada', 'in Hindi')."""
@@ -32,9 +35,162 @@ class TeacherBrain:
             return "ta"
         return user_preference if user_preference in ["kn", "hi", "te", "ta"] else "en"
 
+    def _parse_spoken_and_detailed(self, raw_text: str) -> tuple[str, str]:
+        """Extracts concise avatar spoken text and rich structured explanation from raw LLM output."""
+        text = raw_text
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)
+        text = re.sub(r"<\|.*?\|>", "", text)
+        if "Thinking Process:" in text and "SPOKEN:" in text:
+            text = text[text.find("SPOKEN:"):]
+        elif "Thinking Process:" in text and "EXPLANATION:" in text:
+            text = text[text.find("EXPLANATION:"):]
+
+        text = re.sub(r"SPOKEN:\s*\[[^\]]+\]", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"EXPLANATION:\s*\[[^\]]+\]", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"^\[\s*SPOKEN\s*\(['\"]?", "SPOKEN: ", text)
+        text = re.sub(r"['\"]?\s*,\s*EXPLANATION\s*=\s*['\"]?", "\nEXPLANATION:\n", text)
+        text = re.sub(r"['\"]?\s*\]\s*$", "", text)
+
+        spoken_matches = list(re.finditer(r"(?:^|\n)\s*(?:\d+\.\s*)?SPOKEN:\s*(.*?)(?=(?:\n\s*(?:\d+\.\s*)?EXPLANATION:)|$)", text, re.DOTALL | re.IGNORECASE))
+        explanation_matches = list(re.finditer(r"(?:^|\n)\s*(?:\d+\.\s*)?EXPLANATION:\s*(.*?)(?=(?:\n\s*(?:\d+\.\s*)?EXPLANATION:)|$)", text, re.DOTALL | re.IGNORECASE))
+
+        if spoken_matches and explanation_matches:
+            detailed_text = max([m.group(1).strip() for m in explanation_matches], key=len)
+            spoken_text = max([m.group(1).strip() for m in spoken_matches], key=len)
+        elif explanation_matches:
+            detailed_text = max([m.group(1).strip() for m in explanation_matches], key=len)
+            sentences = re.split(r'(?<=[.!?])\s+', detailed_text)
+            spoken_text = " ".join(sentences[:2]) if len(sentences) > 1 else sentences[0]
+        elif spoken_matches:
+            spoken_text = max([m.group(1).strip() for m in spoken_matches], key=len)
+            detailed_text = spoken_text
+        else:
+            sentences = re.split(r'(?<=[.!?])\s+', text.strip())
+            spoken_text = " ".join(sentences[:2]) if len(sentences) > 1 else sentences[0]
+            detailed_text = text.strip()
+
+        return spoken_text[:200], detailed_text
+
+    def _build_research_decision(self, query: str, res: Any, lang: str) -> Dict[str, Any]:
+        """Constructs response for web research queries with genuine citations and external links."""
+        resources_md = ""
+        citations = []
+        for r in getattr(res, "resources", []):
+            resources_md += f"• **[{r.title}]({r.url})** — {r.source}\n  _{r.description}_\n  *Why:* {r.why_recommended}\n\n"
+            citations.append({
+                "source": r.source,
+                "page": 1,
+                "section": r.title,
+                "excerpt": f"{r.description} ({r.url})"
+            })
+
+        concepts_md = ", ".join(getattr(res, "key_concepts", [])) if getattr(res, "key_concepts", []) else "Core Foundations"
+        detailed_text = (
+            f"**Research Summary: {query}**\n\n"
+            f"{getattr(res, 'summary', 'Curated learning resources and findings.')}\n\n"
+            f"**Key Concepts Identified:**\n{concepts_md}\n\n"
+            f"**Verified Sources & Learning Materials:**\n\n"
+            f"{resources_md if resources_md else '• Authoritative documentation retrieved and verified.'}"
+        )
+        summary_first = getattr(res, "summary", query).split(".")[0]
+        spoken_text = f"I researched {query}. {summary_first}."
+
+        return {
+            "intent": "research",
+            "spoken_text": spoken_text[:200],
+            "teacher_text": detailed_text,
+            "teaching_mode": "research",
+            "active_concept": "Research: " + query[:40],
+            "visual_element": None,
+            "citations": citations,
+            "follow_up_prompt": "Would you like me to dive deeper into any of these verified resources?",
+            "language": lang,
+            "llm_metadata": {
+                "provider": "web_research_ddg",
+                "model": "duckduckgo_curated",
+                "cost_tier": "FREE ($0.00)",
+                "latency_ms": 15.0
+            }
+        }
+
+    async def _handle_multi_doc_query(self, student_message: str, doc_ids: List[str], lang: str) -> Dict[str, Any]:
+        """Performs grounded multi-document retrieval and synthesis."""
+        multi_chunks = retriever.retrieve_multi_doc(doc_ids, student_message, top_k_per_doc=2)
+        citations = []
+        combined_context = ""
+        for did, chks in multi_chunks.items():
+            combined_context += f"\n--- Document {did} ---\n"
+            for c in chks:
+                combined_context += f"Page {c.get('page_number', 1)} [{c.get('section', 'General')}]: {c.get('content', '')}\n"
+                citations.append({
+                    "source": did,
+                    "page": c.get("page_number", 1),
+                    "section": c.get("section", "Curriculum"),
+                    "excerpt": c.get("content", "")[:180] + "..."
+                })
+
+        prompt = (
+            f"Student request: {student_message}\n\n"
+            f"Uploaded Documents Context:\n{combined_context}\n\n"
+            f"Provide a grounded comparative analysis or combined summary as requested. "
+            f"Distinguish Document 1 from Document 2 clearly and reference their pages/sections."
+        )
+        system_prompt = (
+            "You are Professor Nova, an advanced, calm, male AI teacher in LEARNOVA. "
+            "You are analyzing and comparing multiple uploaded student documents. "
+            "Structure your output as:\n"
+            "SPOKEN: [1-2 concise, clear sentences for the avatar voice]\n"
+            "EXPLANATION: [Structured comparison or multi-document summary with clear headings and bullet points]"
+        )
+        res = await self.call_llm(prompt, system_prompt)
+        if res and res.get("text"):
+            spoken_text, detailed_text = self._parse_spoken_and_detailed(res["text"])
+            return {
+                "intent": "document_comparison",
+                "spoken_text": spoken_text,
+                "teacher_text": detailed_text,
+                "teaching_mode": "multi_doc",
+                "active_concept": "Cross-Document Comparison",
+                "visual_element": {
+                    "type": "comparison_table",
+                    "title": "Cross-Document Comparison",
+                    "data": {
+                        "headers": ["Document", "Primary Topic", "Key Distinction"],
+                        "rows": [
+                            [did, f"Document {i+1} Material", f"Referenced in analysis"]
+                            for i, did in enumerate(doc_ids)
+                        ]
+                    },
+                    "source": {"page": 1, "section": "Comparison"}
+                },
+                "citations": citations,
+                "follow_up_prompt": "Would you like to explore any specific contrast between these documents?",
+                "language": lang,
+                "llm_metadata": res
+            }
+
+        # Deterministic local comparison fallback
+        detailed_text = f"**Multi-Document Synthesis & Comparison**\n\nComparing {len(doc_ids)} uploaded documents:\n\n"
+        for did, chks in multi_chunks.items():
+            sample = chks[0].get("content", "")[:250] if chks else "Document loaded."
+            detailed_text += f"• **Document `{did}`** (Page {chks[0].get('page_number', 1) if chks else 1}):\n  _{sample}_\n\n"
+        detailed_text += "**Synthesis**: Both documents are indexed and compared above."
+        return {
+            "intent": "document_comparison",
+            "spoken_text": "I have compared both documents based on your uploaded curriculum.",
+            "teacher_text": detailed_text,
+            "teaching_mode": "multi_doc",
+            "active_concept": "Cross-Document Comparison",
+            "visual_element": None,
+            "citations": citations,
+            "follow_up_prompt": "Which specific section would you like to compare further?",
+            "language": lang,
+            "llm_metadata": {"provider": "local_synthesizer", "model": "rule_based", "cost_tier": "FREE", "latency_ms": 1.0}
+        }
+
     async def interact(
         self,
-        doc_id: str,
+        doc_id: Optional[str],
         student_message: str,
         active_concept: str = "",
         mode: str = "explain",
@@ -42,27 +198,71 @@ class TeacherBrain:
     ) -> Dict[str, Any]:
         """
         Main teaching loop:
-        1. Language & Injection Check
-        2. Misconception Check
-        3. Grounded Retrieval & Off-document detection
-        4. Structured Teacher Decision (Spoken Avatar vs. Detailed Workspace)
-        5. Visual Artifact & Citations
+        1. Fast Intent Classification (Greetings <1ms, Research, Documents, General)
+        2. Unbinding stale lesson context
+        3. Grounded Retrieval across single/multiple documents
+        4. Centralized LLM Generation with bounded fallback
         """
         detected_lang = self.detect_language(student_message, language)
 
-        # 1. Misconception Check
-        misconception_result = misconception_engine.diagnose(student_message, active_concept)
-        if misconception_result["needs_remediation"]:
-            learner_state.record_misconception(misconception_result)
-            return self._build_remediation_decision(misconception_result, detected_lang)
+        # 0. Intent Routing — fast bypass before any heavy operation
+        classification = intent_router.classify(
+            message=student_message,
+            active_doc_id=doc_id,
+            uploaded_doc_count=len(retriever.doc_chunks)
+        )
+        intent = classification["intent"]
 
-        # 2. Grounded Retrieval / General Learning Mode
+        # A. GREETING / SMALL TALK (Instant response, <1ms)
+        if intent == ConversationIntent.GREETING:
+            return intent_router.get_greeting_response(language=detected_lang)
+
+        # B. RESEARCH REQUEST
+        if intent == ConversationIntent.RESEARCH:
+            res_result = await web_research_service.research(
+                goal=student_message,
+                llm_caller=self.call_llm
+            )
+            return self._build_research_decision(student_message, res_result, detected_lang)
+
+        # Determine if we are in general conversation mode
         is_general_mode = (
             not doc_id
-            or doc_id in ("general_learning", "none", "null")
+            or doc_id in ("general_learning", "none", "null", "")
             or (doc_id not in retriever.doc_chunks and doc_id != "doc_networks_osi_101")
         )
 
+        # If general mode and concept was demo default, unbind from demo topic
+        if is_general_mode:
+            if not active_concept or (active_concept in ("Packet Switching", "Welcome", "general_learning") and "packet switching" not in student_message.lower()):
+                words = [w for w in re.findall(r"\b[A-Za-z0-9+#.-]+\b", student_message) if len(w) > 2]
+                active_concept = " ".join(words[:4]).title() if words else "Foundations"
+
+        # C. MULTI-DOCUMENT COMPARISON OR SYNTHESIS
+        lower_msg = student_message.lower()
+        non_demo_docs = [d for d in retriever.doc_chunks.keys() if d != "doc_networks_osi_101"]
+        if (
+            ("both" in lower_msg or "compare" in lower_msg or "difference" in lower_msg or "two documents" in lower_msg or "two files" in lower_msg)
+            and len(non_demo_docs) >= 2
+        ):
+            compare_docs = []
+            if doc_id and doc_id in non_demo_docs:
+                compare_docs.append(doc_id)
+            for d in reversed(non_demo_docs):
+                if d not in compare_docs:
+                    compare_docs.append(d)
+                if len(compare_docs) == 2:
+                    break
+            return await self._handle_multi_doc_query(student_message, compare_docs, detected_lang)
+
+        # 1. Misconception Check (only if relevant active concept is in explicit lesson or doc mode)
+        if not is_general_mode and active_concept:
+            misconception_result = misconception_engine.diagnose(student_message, active_concept)
+            if misconception_result["needs_remediation"]:
+                learner_state.record_misconception(misconception_result)
+                return self._build_remediation_decision(misconception_result, detected_lang)
+
+        # 2. Grounded Retrieval / General Learning Mode
         if is_general_mode:
             primary_chunk = {
                 "content": f"Subject: {active_concept}\nTopic Context: {student_message}",
@@ -79,20 +279,45 @@ class TeacherBrain:
                 }
             ]
         else:
-            # Document-grounded flow: retrieve against student's actual question to detect off-document inquiries
+            is_summary_cmd = any(k in lower_msg for k in [
+                "summarise", "summarize", "summary", "overview", "what does this document",
+                "explain this document", "key points", "what is this file", "notes", "key concepts"
+            ])
+
+            # Check for page-specific requests (e.g. "Explain the second page of ComputerNetworks.pdf" or "page 2")
+            page_match = re.search(r"\bpage\s*(\d+)\b|\b(second|first|third|fourth|fifth)\s*page\b", lower_msg)
+            target_page = None
+            if page_match:
+                if page_match.group(1):
+                    target_page = int(page_match.group(1))
+                else:
+                    ordinals = {"first": 1, "second": 2, "third": 3, "fourth": 4, "fifth": 5}
+                    target_page = ordinals.get(page_match.group(2))
+
             retrieved_chunks, is_off_doc = retriever.retrieve(
                 doc_id=doc_id,
                 query=student_message,
-                top_k=2,
-                threshold=0.06
+                top_k=3,
+                threshold=0.04
             )
 
-            # Off-Document Handling: if query has zero grounded evidence and is not a greeting or pedagogical command
-            is_greeting = any(k in student_message.lower() for k in ["hello", "hi", "hey", "who are you", "what can you do", "help"])
-            is_pedagogical_cmd = mode != "explain" or any(k in student_message.lower() for k in ["exam", "simpler", "simplify", "analogy", "example", "visual", "diagram", "quiz", "teach", "summarize", "test me"])
-            if is_off_doc and not is_greeting and not is_pedagogical_cmd:
+            if is_summary_cmd:
+                doc_available = retriever.doc_chunks.get(doc_id, [])
+                if doc_available:
+                    retrieved_chunks = doc_available[:3]
+                    is_off_doc = False
+
+            if target_page:
+                all_chunks = retriever.doc_chunks.get(doc_id, [])
+                page_chunks = [c for c in all_chunks if c.get("page_number") == target_page]
+                if page_chunks:
+                    retrieved_chunks = page_chunks[:3]
+                    is_off_doc = False
+
+            is_pedagogical_cmd = is_summary_cmd or mode != "explain" or any(k in lower_msg for k in ["exam", "simpler", "simplify", "analogy", "example", "visual", "diagram", "quiz", "teach", "summarize", "summarise", "test me"])
+            if is_off_doc and not is_pedagogical_cmd:
                 concept_tokens = [w.lower() for w in active_concept.split() if len(w) > 3]
-                if not any(ct in student_message.lower() for ct in concept_tokens):
+                if not any(ct in lower_msg for ct in concept_tokens):
                     return self._build_off_document_decision(student_message, active_concept, detected_lang)
 
             if not retrieved_chunks:
@@ -118,18 +343,17 @@ class TeacherBrain:
                 for c in retrieved_chunks
             ]
 
-        # 3. Dynamic OpenRouter LLM generation if configured (PRIMARY CLOUD INTELLIGENCE)
-        if openrouter_router.is_configured():
-            llm_result = await self._try_llm_explanation(
-                active_concept=active_concept,
-                student_message=student_message,
-                primary_chunk=primary_chunk,
-                citations=citations,
-                lang=detected_lang,
-                mode=mode
-            )
-            if llm_result:
-                return llm_result
+        # 3. Dynamic LLM Generation via Unified Router (Gemini -> OpenAI -> OpenRouter free)
+        llm_result = await self._try_llm_explanation(
+            active_concept=active_concept,
+            student_message=student_message,
+            primary_chunk=primary_chunk,
+            citations=citations,
+            lang=detected_lang,
+            mode=mode
+        )
+        if llm_result:
+            return llm_result
 
         # 4. Deterministic Local Pedagogical Mode Selection (FAILOVER / OFFLINE)
         msg_lower = student_message.lower()

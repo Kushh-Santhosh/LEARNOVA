@@ -11,6 +11,7 @@ import {
   CapturedDOMElement
 } from '../../services/screenCapture';
 import { voiceSynthesis } from '../../services/voiceSynthesis';
+import { MarkdownRenderer } from '../MarkdownRenderer';
 import {
   Sparkles,
   Compass,
@@ -235,7 +236,7 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
 
     try {
       const docId = activeDocId || 'general_learning';
-      const concept = activeConceptName || activeDocTitle || `${activePageLabel} Context`;
+      const concept = activeDocId ? (activeConceptName || activeDocTitle || '') : '';
 
       const response = await api.teach({
         document_id: docId,
@@ -664,7 +665,9 @@ export const FloatingNovaCompanion: React.FC<FloatingNovaCompanionProps> = ({
                           : 'bg-slate-100 text-slate-900 rounded-bl-xs'
                       }`}
                     >
-                      <div className="whitespace-pre-wrap">{m.text}</div>
+                      <div className="text-xs leading-relaxed">
+                        <MarkdownRenderer content={m.text} />
+                      </div>
 
                       {/* Verifiable Citations */}
                       {m.citations && m.citations.length > 0 && (

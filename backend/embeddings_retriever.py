@@ -182,4 +182,22 @@ class GroundedRetriever:
             return 0.0
         return dot_product / (mag1 * mag2)
 
+    def retrieve_multi_doc(
+        self,
+        doc_ids: List[str],
+        query: str,
+        top_k_per_doc: int = 2
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """Retrieves chunks from multiple documents for cross-document comparison or synthesis."""
+        results = {}
+        for did in doc_ids:
+            chunks, _ = self.retrieve(did, query, top_k=top_k_per_doc, threshold=0.01)
+            if not chunks:
+                doc_available = self.doc_chunks.get(did, [])
+                chunks = doc_available[:top_k_per_doc]
+            results[did] = chunks
+        return results
+
+
 retriever = GroundedRetriever()
+
