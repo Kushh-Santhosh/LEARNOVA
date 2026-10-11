@@ -7,6 +7,30 @@ Adheres to security policies: never logs or leaks sensitive credentials.
 import os
 from typing import Optional
 
+def load_env():
+    """Loads variables from root .env or local .env into os.environ safely without external dependencies."""
+    search_paths = [
+        os.path.join(os.path.dirname(__file__), "..", ".env"),
+        os.path.join(os.path.dirname(__file__), ".env"),
+        os.path.abspath(".env")
+    ]
+    for p in search_paths:
+        if os.path.exists(p):
+            try:
+                with open(p, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if line and not line.startswith("#") and "=" in line:
+                            k, v = line.split("=", 1)
+                            key = k.strip()
+                            val = v.strip().strip("'\"")
+                            if key and key not in os.environ:
+                                os.environ[key] = val
+            except Exception:
+                pass
+
+load_env()
+
 
 class Settings:
     """Application settings with environment variable overrides."""

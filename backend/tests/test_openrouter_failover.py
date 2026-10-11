@@ -52,6 +52,21 @@ async def test_failover_a_times_out_b_fails_c_succeeds():
 
 
 @pytest.mark.anyio
+async def test_failover_rate_limit_429_switches_model():
+    """Controlled failure test: Candidate 1 returns 429 Too Many Requests -> switches to Candidate 2."""
+    openrouter_router.set_simulation(
+        failures={1: 429},
+        responses={2: "Response after 429 rate limit backoff"}
+    )
+    res = await openrouter_router.generate_completion(prompt="Rate limit test prompt")
+    assert res is not None
+    assert res["attempt"] == 2
+    assert res["fallback_used"] is True
+    assert res["text"] == "Response after 429 rate limit backoff"
+    assert res["cost_tier"] == "FREE"
+
+
+@pytest.mark.anyio
 async def test_all_cloud_models_fail_uses_local_teacher():
     """Controlled failure test: All cloud models fail -> router returns None -> local teacher responds."""
     openrouter_router.set_simulation(

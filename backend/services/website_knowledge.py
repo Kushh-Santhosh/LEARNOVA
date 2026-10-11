@@ -194,24 +194,31 @@ class WebsiteKnowledgeBase:
 
     def search(self, query: str, top_k: int = 3) -> List[Dict[str, Any]]:
         """
-        Retrieves top relevant chunks with exact term-overlap scoring.
+        Retrieves top relevant chunks with token-overlap scoring and stopword filtering.
         """
-        query_words = set(re.findall(r"\w+", query.lower()))
-        if not query_words or not self.chunks:
+        stop_words = {
+            "the", "is", "at", "which", "on", "a", "an", "and", "or", "to", "in",
+            "for", "of", "with", "as", "by", "from", "how", "what", "why", "when",
+            "where", "who", "do", "does", "did", "can", "could", "would", "should", "this", "that"
+        }
+        all_words = [w for w in re.findall(r"\w+", query.lower())]
+        meaningful_words = [w for w in all_words if len(w) > 2 and w not in stop_words]
+        query_tokens = set(meaningful_words if meaningful_words else all_words)
+        if not query_tokens or not self.chunks:
             return []
 
         scored = []
         for c in self.chunks:
-            content_lower = c["content"].lower()
-            title_lower = c["title"].lower()
-            
-            # Simple keyword matching score
-            matches = sum(1 for w in query_words if w in content_lower)
-            title_matches = sum(2 for w in query_words if w in title_lower)
-            score = (matches + title_matches) / (len(query_words) + 1)
+            content_tokens = set(re.findall(r"\w+", c["content"].lower()))
+            title_tokens = set(re.findall(r"\w+", c["title"].lower()))
 
-            if score > 0.05:
-                scored.append((score, c))
+            # Whole-token overlap
+            body_matches = sum(1 for w in query_tokens if w in content_tokens)
+            title_matches = sum(2 for w in query_tokens if w in title_tokens)
+            total_score = (body_matches + title_matches) / max(1, len(query_tokens))
+
+            if total_score >= 0.2:
+                scored.append((total_score, c))
 
         scored.sort(key=lambda x: x[0], reverse=True)
         return [{"score": round(s, 3), **chunk} for s, chunk in scored[:top_k]]
@@ -387,7 +394,7 @@ class WebsiteKnowledgeService:
             }
 
         relevant_chunks = kb.search(question, top_k=3)
-        if not relevant_chunks or relevant_chunks[0]["score"] < 0.12:
+        if not relevant_chunks or relevant_chunks[0]["score"] < 0.25:
             return {
                 "answer": "I do not have sufficient evidence from the indexed website pages to answer that question accurately.",
                 "has_sufficient_evidence": False,

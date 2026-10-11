@@ -67,23 +67,12 @@ class SupabasePersistenceService:
         }
 
         try:
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                res = await client.get(f"{self.url}/rest/v1/", headers=headers)
-                if res.status_code == 200:
-                    self.last_status = "CONNECTED"
-                    self.last_error = ""
-                    self.verified_at = time.time()
-                    return {
-                        "configured": True,
-                        "status": "CONNECTED",
-                        "authenticated": True,
-                        "fallback_active": False,
-                        "is_service_role": self.is_service_role,
-                        "url_domain": self.url.split("//")[-1].split(".")[0] + ".supabase.co"
-                    }
-                elif res.status_code == 401:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                # 1. Verify key authenticity and API connectivity against Auth settings
+                auth_res = await client.get(f"{self.url}/auth/v1/settings", headers=headers)
+                if auth_res.status_code == 401:
                     self.last_status = "UNVERIFIED_CREDENTIALS"
-                    self.last_error = "Supabase rejected the API key (401 Unauthorized / Invalid key)."
+                    self.last_error = "Supabase rejected the API key (401 Unauthorized)."
                     return {
                         "configured": True,
                         "status": "UNVERIFIED_CREDENTIALS",
@@ -92,9 +81,9 @@ class SupabasePersistenceService:
                         "error": self.last_error,
                         "hint": "Check SUPABASE_PUBLISHABLE_KEY / SUPABASE_SECRET_KEY in .env"
                     }
-                else:
-                    self.last_status = f"HTTP_{res.status_code}"
-                    self.last_error = f"Supabase returned status {res.status_code}."
+                elif auth_res.status_code != 200:
+                    self.last_status = f"HTTP_{auth_res.status_code}"
+                    self.last_error = f"Supabase auth check returned status {auth_res.status_code}."
                     return {
                         "configured": True,
                         "status": self.last_status,
@@ -102,9 +91,53 @@ class SupabasePersistenceService:
                         "fallback_active": True,
                         "error": self.last_error
                     }
+
+                # Key is verified and connected to project.
+                # 2. Check schema cache for table existence
+                schema_res = await client.get(f"{self.url}/rest/v1/learning_documents?limit=1", headers=headers)
+                domain = self.url.split("//")[-1].split(".")[0] + ".supabase.co"
+                self.verified_at = time.time()
+
+                if schema_res.status_code == 200:
+                    self.last_status = "CONNECTED"
+                    self.last_error = ""
+                    return {
+                        "configured": True,
+                        "status": "CONNECTED",
+                        "authenticated": True,
+                        "fallback_active": False,
+                        "schema_ready": True,
+                        "is_service_role": self.is_service_role,
+                        "url_domain": domain
+                    }
+                elif schema_res.status_code == 404 and "PGRST205" in schema_res.text:
+                    self.last_status = "CONNECTED_PENDING_MIGRATIONS"
+                    self.last_error = "Database connected, but schema tables not found (migrations pending)."
+                    return {
+                        "configured": True,
+                        "status": "CONNECTED_PENDING_MIGRATIONS",
+                        "authenticated": True,
+                        "fallback_active": True,
+                        "schema_ready": False,
+                        "is_service_role": self.is_service_role,
+                        "url_domain": domain,
+                        "hint": "Run backend/migrations/001_initial_schema.sql in Supabase SQL Editor"
+                    }
+                else:
+                    self.last_status = "CONNECTED_TABLE_RESTRICTED"
+                    self.last_error = f"Table query returned {schema_res.status_code}."
+                    return {
+                        "configured": True,
+                        "status": self.last_status,
+                        "authenticated": True,
+                        "fallback_active": True,
+                        "schema_ready": False,
+                        "is_service_role": self.is_service_role,
+                        "url_domain": domain
+                    }
         except httpx.TimeoutException:
             self.last_status = "TIMEOUT"
-            self.last_error = "Connection to Supabase timed out after 4 seconds."
+            self.last_error = "Connection to Supabase timed out after 5 seconds."
             return {
                 "configured": True,
                 "status": "TIMEOUT",
