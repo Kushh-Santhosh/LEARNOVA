@@ -43,6 +43,7 @@ import {
 } from 'lucide-react';
 
 import { AvatarTurn } from '../types';
+import { PdfReaderModal } from '../components/PdfReaderModal';
 
 interface ClassroomWorkspaceProps {
   activeDoc: DocumentMeta | null;
@@ -61,6 +62,8 @@ interface ChatMessageAttachment {
   size: number;
   formattedSize: string;
   type?: string;
+  file?: File;
+  docId?: string;
 }
 
 interface ChatMessage {
@@ -110,6 +113,50 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
   const [isTeachBackOpen, setIsTeachBackOpen] = useState(false);
   const [isVoiceSettingsOpen, setIsVoiceSettingsOpen] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState<string>('');
+
+  // Free Mozilla PDF.js Reader State
+  const [pdfReaderState, setPdfReaderState] = useState<{
+    isOpen: boolean;
+    title: string;
+    source: string | File | Blob;
+    initialPage?: number;
+  }>({
+    isOpen: false,
+    title: '',
+    source: '',
+    initialPage: 1,
+  });
+  const attachedFilesCacheRef = useRef<Map<string, File>>(new Map());
+
+  const handleOpenPdf = (docOrAtt: {
+    title?: string;
+    name?: string;
+    source?: string | File | Blob;
+    file?: File;
+    docId?: string;
+    page?: number;
+  }) => {
+    const title = docOrAtt.title || docOrAtt.name || 'Document';
+    const cachedFile = docOrAtt.name ? attachedFilesCacheRef.current.get(docOrAtt.name) : undefined;
+    const source =
+      docOrAtt.file ||
+      cachedFile ||
+      docOrAtt.source ||
+      (docOrAtt.docId
+        ? api.getDocumentFileUrl(docOrAtt.docId)
+        : docOrAtt.name
+        ? api.getDocumentFileUrl(`doc_${docOrAtt.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}`)
+        : '');
+
+    if (source) {
+      setPdfReaderState({
+        isOpen: true,
+        title,
+        source,
+        initialPage: docOrAtt.page || 1,
+      });
+    }
+  };
 
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -309,6 +356,12 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
     const currentController = new AbortController();
     abortControllerRef.current = currentController;
 
+    if (attachedFiles && attachedFiles.length > 0) {
+      for (const f of attachedFiles) {
+        attachedFilesCacheRef.current.set(f.name, f);
+      }
+    }
+
     const attachmentPreviews = (attachedFiles || []).map((f) => ({
       name: f.name,
       size: f.size,
@@ -317,6 +370,7 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
           ? `${(f.size / 1024).toFixed(1)} KB`
           : `${(f.size / (1024 * 1024)).toFixed(1)} MB`,
       type: f.type,
+      file: f,
     }));
 
     const studentMsg: ChatMessage = {
@@ -583,6 +637,22 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
             <User className="w-3.5 h-3.5" />
             <span className="hidden md:inline">Focus Teacher</span>
           </button>
+          {(activeDoc?.file_type?.toLowerCase() === 'pdf' || activeDoc?.title?.toLowerCase().endsWith('.pdf')) && (
+            <button
+              onClick={() =>
+                handleOpenPdf({
+                  title: activeDoc.title,
+                  docId: activeDoc.id,
+                  source: api.getDocumentFileUrl(activeDoc.id),
+                })
+              }
+              className="px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Open active document in Mozilla PDF.js Reader"
+            >
+              <FileText className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden sm:inline">Read PDF</span>
+            </button>
+          )}
         </div>
       </header>
 
@@ -740,16 +810,32 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
                   <div className="max-w-[85%] sm:max-w-[75%] flex flex-col items-end gap-1.5">
                     {msg.attachments && msg.attachments.length > 0 && (
                       <div className="flex flex-wrap gap-1.5 justify-end">
-                        {msg.attachments.map((att, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-700 shadow-2xs"
-                          >
-                            <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
-                            <span className="font-medium truncate max-w-[150px]">{att.name}</span>
-                            <span className="text-[10px] text-slate-400">({att.formattedSize})</span>
-                          </div>
-                        ))}
+                        {msg.attachments.map((att, idx) => {
+                          const isPdf = att.name.toLowerCase().endsWith('.pdf');
+                          return (
+                            <div
+                              key={idx}
+                              onClick={() => {
+                                if (isPdf) {
+                                  handleOpenPdf(att);
+                                }
+                              }}
+                              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 border border-slate-200 text-xs text-slate-700 shadow-2xs ${
+                                isPdf ? 'cursor-pointer hover:bg-slate-200 hover:border-slate-300' : ''
+                              }`}
+                              title={isPdf ? 'Click to open in Mozilla PDF.js Reader' : undefined}
+                            >
+                              <FileText className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
+                              <span className="font-medium truncate max-w-[150px]">{att.name}</span>
+                              <span className="text-[10px] text-slate-400">({att.formattedSize})</span>
+                              {isPdf && (
+                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-indigo-50 text-indigo-700 font-semibold border border-indigo-200/80">
+                                  View PDF
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                     <div className="rounded-2xl px-4 py-3 bg-slate-200/80 text-slate-900 text-sm font-normal leading-relaxed">
@@ -795,6 +881,10 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
               activeLanguage={activeLanguage}
               onChangeLanguage={onChangeLanguage}
               onOpenDocuments={onOpenDocuments}
+              onOpenPdfPreview={(file) => {
+                attachedFilesCacheRef.current.set(file.name, file);
+                handleOpenPdf({ name: file.name, file });
+              }}
               liveTranscript={liveTranscript}
             />
           </div>
@@ -933,6 +1023,19 @@ export const ClassroomWorkspace: React.FC<ClassroomWorkspaceProps> = ({
           </div>
         </div>
       )}
+
+      {/* Free In-App Mozilla PDF.js Reader Modal */}
+      <PdfReaderModal
+        isOpen={pdfReaderState.isOpen}
+        onClose={() => setPdfReaderState((prev) => ({ ...prev, isOpen: false }))}
+        documentTitle={pdfReaderState.title}
+        pdfSource={pdfReaderState.source}
+        initialPage={pdfReaderState.initialPage || 1}
+        onAskNova={(prompt) => {
+          setPdfReaderState((prev) => ({ ...prev, isOpen: false }));
+          handleSendMessage(prompt);
+        }}
+      />
     </div>
   );
 };

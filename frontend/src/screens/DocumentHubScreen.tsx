@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { DocumentMeta, WebsiteStatusResponse, WebsiteChatResponse } from '../types';
 import { api } from '../api';
+import { PdfReaderModal } from '../components/PdfReaderModal';
 import {
   UploadCloud,
   FileText,
@@ -37,6 +38,7 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
   const [isProcessing, setIsProcessing] = useState(false);
   const [processingStage, setProcessingStage] = useState<string>('');
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [selectedPdfDoc, setSelectedPdfDoc] = useState<{ id: string; title: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Website Ingestion State
@@ -402,6 +404,20 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
                 </div>
 
                 <div className="flex items-center space-x-2 shrink-0">
+                  {doc.file_type.toLowerCase() === 'pdf' && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedPdfDoc({ id: doc.id, title: doc.title });
+                      }}
+                      className="px-2.5 py-1 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-medium border border-indigo-200/80 transition-colors flex items-center gap-1 cursor-pointer"
+                      title="Open in Mozilla PDF.js Reader"
+                    >
+                      <FileText className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Read PDF</span>
+                    </button>
+                  )}
                   <span className="text-xs text-slate-400 group-hover:text-slate-900 font-medium transition-colors hidden sm:inline">
                     Open in Lesson
                   </span>
@@ -412,6 +428,21 @@ export const DocumentHubScreen: React.FC<DocumentHubScreenProps> = ({
           })}
         </div>
       </div>
+
+      {/* Free In-App Mozilla PDF.js Reader */}
+      {selectedPdfDoc && (
+        <PdfReaderModal
+          isOpen={Boolean(selectedPdfDoc)}
+          onClose={() => setSelectedPdfDoc(null)}
+          documentTitle={selectedPdfDoc.title}
+          pdfSource={api.getDocumentFileUrl(selectedPdfDoc.id)}
+          onAskNova={() => {
+            onSelectDocument(selectedPdfDoc.id);
+            setSelectedPdfDoc(null);
+            onEnterClassroom();
+          }}
+        />
+      )}
     </div>
   );
 };

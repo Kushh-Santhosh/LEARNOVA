@@ -52,12 +52,16 @@ RESEARCH_PATTERNS = [
 ]
 
 DOC_PATTERNS = [
-    r"\b(?:summarise|summarize)\s+(?:both|all|the\s+two)\s+(?:documents|files|pdfs)\b",
+    r"\b(?:summarise|summarize)\s+(?:both|all|the\s+two)?\s*(?:documents?|files?|pdfs?|this|it)?\b",
     r"\b(?:difference\s+between\s+(?:the\s+two|both)|compare\s+(?:both|the\s+two|the\s+documents|the\s+files))\b",
-    r"\b(?:in\s+this|from\s+this)\s+(?:pdf|doc|document|file|notes|paper)\b",
-    r"\bexplain\s+(?:page\s+\d+|chapter\s+\d+|the\s+second\s+page|the\s+first\s+page)\b",
+    r"\b(?:in\s+this|from\s+this|in\s+it|from\s+it)\s*(?:pdf|doc|document|file|notes|paper|bill|invoice)?\b",
+    r"\bexplain\s+(?:me\s+about\s+)?(?:this|the)\s+(?:pdf|doc|document|file|bill|invoice)\b",
+    r"\b(?:what\s+does|what\s+is\s+in)\s+(?:the|this)\s+(?:pdf|doc|document|file|bill|invoice)\b",
+    r"\b(?:what\s+does\s+)?page\s+\d+\s*(?:say)?\b",
+    r"\b(?:chapter\s+\d+|the\s+second\s+page|the\s+first\s+page)\b",
     r"\bexam\s+questions\s+in\s+these\s+notes\b",
-    r"\bwhat\s+does\s+(?:the|this)\s+(?:pdf|doc|document|file)\s+say\b",
+    r"\b(?:rates?|amounts?|charges?|fees?|totals?|grand\s+total|cost|price)\s+(?:in\s+(?:it|this|the\s+bill|the\s+pdf|the\s+document))\b",
+    r"\bwhat\s+(?:are|is)\s+(?:the\s+)?(?:rates?|total|grand\s+total|total\s+amount|charges?|fees?|amount)\b",
 ]
 
 
@@ -134,7 +138,7 @@ class IntentRouter:
                     "requires_document": False,
                 }
 
-        # 4. Multi-document or single-document queries
+        # 4. Multi-document or single-document queries matching explicit patterns
         for pat in DOC_PATTERNS:
             if re.search(pat, lower_msg):
                 return {
@@ -148,7 +152,9 @@ class IntentRouter:
         doc_terms = [
             ".pdf", ".docx", ".txt", ".c", ".cpp", ".py", ".java", ".csv",
             "pdf", "docx", "uploaded file", "uploaded document", "this document",
-            "this file", "these notes", "uploaded notes", "both files", "both documents"
+            "this file", "these notes", "uploaded notes", "both files", "both documents",
+            "this pdf", "the pdf", "this bill", "the bill", "this invoice", "the invoice",
+            "this attachment", "attached file", "attached pdf", "rates in it", "rates in this"
         ]
         if any(term in lower_msg for term in doc_terms):
             return {
@@ -158,10 +164,16 @@ class IntentRouter:
                 "requires_document": True,
             }
 
-        # If user has an active document open and is asking something specific while in document mode
+        # If user has an active document open and is asking something specific about it
         if active_doc_id and active_doc_id not in ("general_learning", "none", "null", ""):
-            # Check if query asks for document-specific sections or summary
-            if any(k in lower_msg for k in ["summarize", "summarise", "explain this", "what is this about", "key points", "quiz on this"]):
+            # Check if query asks for document-specific aspects or follow-ups
+            doc_query_cues = [
+                "summarize", "summarise", "summary", "overview", "explain this", "what is this",
+                "what does it say", "key points", "quiz on this", "rates", "rate", "fee", "fees",
+                "amount", "amounts", "total", "grand total", "subtotal", "tax", "charges", "charge",
+                "page", "section", "in it", "in this", "from it", "from this", "who issued", "date"
+            ]
+            if any(k in lower_msg for k in doc_query_cues):
                 return {
                     "intent": ConversationIntent.DOCUMENT_QUESTION,
                     "confidence": 0.88,

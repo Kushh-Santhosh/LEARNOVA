@@ -46,6 +46,7 @@ interface ChatComposerProps {
   activeLanguage: string;
   onChangeLanguage: (lang: string) => void;
   onOpenDocuments?: () => void;
+  onOpenPdfPreview?: (file: File) => void;
   liveTranscript?: string;
 }
 
@@ -59,6 +60,7 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
   activeLanguage,
   onChangeLanguage,
   onOpenDocuments,
+  onOpenPdfPreview,
   liveTranscript,
 }) => {
   const [text, setText] = useState('');
@@ -334,26 +336,47 @@ export const ChatComposer: React.FC<ChatComposerProps> = ({
         {/* Attachment Preview Chips */}
         {attachedFiles.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-2.5 pb-2 border-b border-slate-100">
-            {attachedFiles.map((item) => (
-              <div
-                key={item.id}
-                className="group flex items-center space-x-2 px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 shadow-2xs hover:border-slate-300 transition-colors"
-              >
-                {getFileIcon(item.name)}
-                <div className="flex flex-col min-w-0 max-w-[180px]">
-                  <span className="font-medium truncate text-slate-900">{item.name}</span>
-                  <span className="text-[10px] text-slate-400">{item.formattedSize}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => handleRemoveAttachment(item.id)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition-colors cursor-pointer"
-                  title="Remove file"
+            {attachedFiles.map((item) => {
+              const isPdf = item.name.toLowerCase().endsWith('.pdf');
+              return (
+                <div
+                  key={item.id}
+                  className="group flex items-center space-x-2 px-2.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-800 shadow-2xs hover:border-slate-300 transition-colors"
                 >
-                  <X className="w-3 h-3" />
-                </button>
-              </div>
-            ))}
+                  {getFileIcon(item.name)}
+                  <div
+                    className={`flex flex-col min-w-0 max-w-[180px] ${isPdf && onOpenPdfPreview ? 'cursor-pointer hover:opacity-80' : ''}`}
+                    onClick={() => {
+                      if (isPdf && onOpenPdfPreview) {
+                        onOpenPdfPreview(item.file);
+                      }
+                    }}
+                    title={isPdf && onOpenPdfPreview ? 'Click to preview in PDF Reader' : undefined}
+                  >
+                    <span className="font-medium truncate text-slate-900">{item.name}</span>
+                    <span className="text-[10px] text-slate-400">{item.formattedSize}</span>
+                  </div>
+                  {isPdf && onOpenPdfPreview && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenPdfPreview(item.file)}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200/60 transition-colors cursor-pointer"
+                      title="Read PDF in viewer"
+                    >
+                      Read
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveAttachment(item.id)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-200/70 transition-colors cursor-pointer"
+                    title="Remove file"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            })}
             <button
               type="button"
               onClick={() => fileInputRef.current?.click()}

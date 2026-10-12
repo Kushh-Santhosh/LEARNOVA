@@ -42,6 +42,10 @@ export const api = {
     return res.json();
   },
 
+  getDocumentFileUrl(docId: string): string {
+    return `${API_BASE}/documents/${encodeURIComponent(docId)}/file`;
+  },
+
   async uploadDocument(file: File): Promise<{ message: string; document: DocumentMeta }> {
     const formData = new FormData();
     formData.append('file', file);

@@ -70,6 +70,23 @@ ENGLISH_STOP_WORDS = {
     "with", "would", "you", "your", "yours", "yourself", "yourselves"
 }
 
+FINANCIAL_AND_DOC_EXPANSIONS = {
+    "rate": "amount price fee charge cost total bill invoice rs rupees",
+    "rates": "amount price fee charge cost total bill invoice rs rupees",
+    "charge": "rate amount fee cost price total bill invoice",
+    "charges": "rates amount fee cost price total bill invoice",
+    "fee": "rate amount charge cost price total bill invoice",
+    "fees": "rates amount charges cost price total bill invoice",
+    "amount": "rate price cost fee charge total rupees rs grandtotalamount",
+    "amounts": "rates prices costs fees charges total rupees rs grandtotalamount",
+    "total": "amount grandtotalamount rupees rs subtotal bill",
+    "bill": "invoice amount total receipt charges rates",
+    "invoice": "bill amount total receipt charges rates",
+    "price": "rate amount cost fee charge total rupees rs",
+    "tax": "gst gstin sac cgst sgst amount",
+    "taxes": "gst gstin sac cgst sgst amount",
+}
+
 class GroundedRetriever:
     def __init__(self):
         # Maps doc_id -> list of chunks
@@ -109,13 +126,36 @@ class GroundedRetriever:
         if not chunks:
             return [], True
 
+        lower_q = query.lower()
+        is_meta_doc_query = any(k in lower_q for k in [
+            "this pdf", "the pdf", "this doc", "this document", "the document",
+            "this file", "the file", "this bill", "the bill", "this invoice", "the invoice",
+            "rates in it", "rates in this", "rate in it", "rates", "fees", "amounts",
+            "explain this", "explain it", "summarise", "summarize", "overview",
+            "what is in this", "what is this", "what does it say", "what does this say",
+            "key points", "breakdown"
+        ])
+
+        # If it's a direct document-level or overview query, return all chunks for small docs or top chunks
+        if is_meta_doc_query:
+            if len(chunks) <= 5:
+                return [dict(c, relevance_score=1.0) for c in chunks], False
+            return [dict(c, relevance_score=1.0) for c in chunks[:top_k]], False
+
         idf = self.doc_vocab.get(doc_id, {})
-        # Map cross-lingual terms if query is in Indic language
+        # Map cross-lingual terms if query is in Indic language and expand financial synonyms
         aligned_query = self._align_cross_lingual_query(query)
+        for term, expansion in FINANCIAL_AND_DOC_EXPANSIONS.items():
+            if re.search(r"\b" + re.escape(term) + r"\b", lower_q):
+                aligned_query += f" {expansion}"
+
         query_vec = self._vectorize(aligned_query, idf)
 
         if not query_vec:
             # Query has zero overlap with vocabulary
+            # If document is small (<= 3 chunks), provide chunks if user is asking about it
+            if len(chunks) <= 3 and any(w in lower_q for w in ["pdf", "bill", "doc", "file", "document", "what", "tell", "explain"]):
+                return [dict(c, relevance_score=0.5) for c in chunks], False
             return [], True
 
         scored_chunks = []

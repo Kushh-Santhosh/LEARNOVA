@@ -29,7 +29,7 @@ load_env()
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
 from pydantic import BaseModel
 
 import json
@@ -142,7 +142,7 @@ if os.path.exists(_uploads_dir):
         if _ext in [".pdf", ".docx", ".txt", ".md", ".csv", ".c", ".h", ".cpp", ".hpp", ".py", ".java"] and not _fname.startswith("."):
             _fpath = os.path.join(_uploads_dir, _fname)
             try:
-                _doc_id = f"doc_{os.path.splitext(_fname)[0]}"
+                _doc_id = f"doc_{os.path.splitext(_fname)[0].lower().replace(' ', '_')}"
                 if _ext == ".pdf":
                     _secs, _chks = DocumentProcessor.extract_from_pdf(_fpath, _doc_id)
                     _ftype = "pdf"
@@ -169,6 +169,7 @@ if os.path.exists(_uploads_dir):
                     "title": os.path.splitext(_fname)[0].replace("_", " ").title(),
                     "filename": _fname,
                     "file_type": _ftype,
+                    "file_path": _fpath,
                     "language": "en",
                     "sections": _secs,
                     "page_count": max([c.get("page_number", 1) for c in _chks]) if _chks else 1,
@@ -415,6 +416,7 @@ async def upload_document(file: UploadFile = File(...)):
         "title": os.path.splitext(filename)[0].replace("_", " ").title(),
         "filename": filename,
         "file_type": file_type,
+        "file_path": file_path,
         "language": detected_lang,
         "sections": sections,
         "page_count": max([c.get("page_number", 1) for c in chunks]) if chunks else 1,
@@ -429,6 +431,38 @@ async def upload_document(file: UploadFile = File(...)):
         "message": "Document processed and knowledge graph constructed successfully.",
         "document": doc_meta
     }
+
+@app.get("/api/documents/{doc_id}/file")
+def get_document_file(doc_id: str):
+    """Serves raw document file for in-app PDF rendering and downloads."""
+    doc = DOCUMENTS.get(doc_id)
+    if not doc:
+        for d in DOCUMENTS.values():
+            if d.get("filename") == doc_id or d.get("id") == doc_id:
+                doc = d
+                break
+    if not doc:
+        uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+        if os.path.exists(uploads_dir):
+            for f in os.listdir(uploads_dir):
+                clean_id = f"doc_{os.path.splitext(f)[0].lower().replace(' ', '_')}"
+                if clean_id == doc_id or f == doc_id or f.lower() == doc_id.lower():
+                    file_path = os.path.join(uploads_dir, f)
+                    media_type = "application/pdf" if f.lower().endswith(".pdf") else "application/octet-stream"
+                    return FileResponse(file_path, media_type=media_type, filename=f)
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_path = doc.get("file_path")
+    if not file_path or not os.path.exists(file_path):
+        uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+        candidate = os.path.join(uploads_dir, doc.get("filename", ""))
+        if os.path.exists(candidate):
+            file_path = candidate
+        else:
+            raise HTTPException(status_code=404, detail="File content not found on server")
+
+    media_type = "application/pdf" if doc.get("file_type") == "pdf" or file_path.lower().endswith(".pdf") else "application/octet-stream"
+    return FileResponse(file_path, media_type=media_type, filename=doc.get("filename"))
 
 @app.get("/api/documents/{doc_id}/knowledge-graph")
 def get_knowledge_graph(doc_id: str):
